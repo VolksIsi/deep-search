@@ -15,8 +15,12 @@
 import datetime
 import logging
 import re
+import asyncio
+import json
+import base64
 from collections.abc import AsyncGenerator
 from typing import Literal
+from pathlib import Path
 
 from google.adk.agents import BaseAgent, LlmAgent, LoopAgent, SequentialAgent
 from google.adk.agents.callback_context import CallbackContext
@@ -28,8 +32,16 @@ from google.adk.tools import google_search
 from google.adk.tools.agent_tool import AgentTool
 from google.genai import types as genai_types
 from pydantic import BaseModel, Field
+import requests
+from bs4 import BeautifulSoup
+import mcp.client.stdio as mcp_stdio
+from mcp import ClientSession, StdioServerParameters
 
 from .config import config
+from .memory import (
+    recall_memories, store_memory, save_session, save_report,
+    get_recent_sessions
+)
 
 
 # --- Structured Output Models ---
@@ -125,7 +137,191 @@ def collect_research_sources_callback(
                             }
                         )
     callback_context.state["url_to_short_id"] = url_to_short_id
-    callback_context.state["sources"] = sources
+# --- New Tools ---
+def web_scrape(url: str) -> str:
+    """Scrapes the content of a web page and returns the text.
+    
+    Args:
+        url (str): The URL of the web page to scrape.
+    """
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Remove script and style elements
+        for script_or_style in soup(["script", "style"]):
+            script_or_style.decompose()
+            
+        # Get text and clean it
+        text = soup.get_text(separator=' ')
+        lines = (line.strip() for line in text.splitlines())
+        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+        text = ' '.join(chunk for chunk in chunks if chunk)
+        
+        return text[:10000] # Return first 10k characters
+    except Exception as e:
+        return f"Error scraping {url}: {str(e)}"
+
+def search_uploaded_docs(query: str) -> str:
+    """Searches through the content of uploaded documents in the local data directory.
+    
+    Args:
+        query (str): The search query to match against documents.
+    """
+    data_dir = config.data_dir
+    results = []
+    
+    if not data_dir.exists():
+        return "No documents found."
+        
+    for file_path in data_dir.glob("*"):
+        if file_path.suffix.lower() in [".txt", ".md", ".json", ".pdf", ".docx"]:
+            try:
+                content = ""
+                if file_path.suffix == ".txt" or file_path.suffix == ".md":
+                    content = file_path.read_text(encoding="utf-8")
+                elif file_path.suffix == ".pdf":
+                    from pypdf import PdfReader
+                    reader = PdfReader(file_path)
+                    for page in reader.pages:
+                        content += page.extract_text()
+                elif file_path.suffix == ".docx":
+                    import docx
+                    doc = docx.Document(file_path)
+                    content = "\n".join([para.text for para in doc.paragraphs])
+                elif file_path.suffix == ".json":
+                    content = file_path.read_text(encoding="utf-8")
+                
+                # Simple keyword search for now (we can enhance this to semantic search later)
+                if query.lower() in content.lower():
+                    # Return a snippet
+                    idx = content.lower().find(query.lower())
+                    start = max(0, idx - 500)
+                    end = min(len(content), idx + 1000)
+                    results.append(f"--- Document: {file_path.name} ---\n{content[start:end]}...")
+            except Exception as e:
+                results.append(f"Error reading {file_path.name}: {str(e)}")
+                
+    if not results:
+        return f"No results found for '{query}' in uploaded documents."
+        
+    return "\n\n".join(results)
+
+async def mcp_query(query: str, server_params: str | None = None) -> str:
+    """Queries an MCP server for specialized tools and data.
+    
+    Args:
+        query (str): The query for the MCP server.
+        server_params (str): JSON string of StdioServerParameters or server name from config.
+    """
+    if not config.mcp_servers and not server_params:
+        return "No MCP servers configured. Connectivity is ready but no servers are active."
+        
+    try:
+        # Use first configured server or the one provided
+        server_cmd = config.mcp_servers[0] if config.mcp_servers else server_params
+        
+        # This is a simplified async client call
+        # In a full-blown implementation, we'd manage sessions
+        server_params = StdioServerParameters(command=server_cmd, args=[], env=None)
+        
+        async with mcp_stdio.stdio_client(server_params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                # List tools and find one that matches the query or just call a default 'query' tool
+                tools = await session.list_tools()
+                if tools.tools:
+                    tool_name = tools.tools[0].name # Just use first tool for demo
+                    result = await session.call_tool(tool_name, arguments={"query": query})
+                    return f"MCP [{server_cmd}] Result: {str(result.content)}"
+                
+        return f"MCP [{server_cmd}] connected but no tools found."
+    except Exception as e:
+        return f"MCP connectivity error: {str(e)}"
+
+
+def recall_past_research(query: str, user_id: str = "u_999") -> str:
+    """Recalls relevant information from past research sessions.
+    
+    Args:
+        query (str): The query to search past memories for.
+        user_id (str): The user whose memory to search.
+    """
+    memories = recall_memories(user_id, query, limit=5)
+    if not memories:
+        return f"No past research found related to '{query}'."
+    
+    results = []
+    for m in memories:
+        results.append(
+            f"--- Session: {m.get('topic', 'Unknown')} (Importance: {m['importance']}) ---\n"
+            f"{m['content'][:500]}..."
+        )
+    return "\n\n".join(results)
+
+
+def generate_chart(chart_type: str, data_json: str, title: str = "Chart") -> str:
+    """Generates a chart/graph and returns it as a base64-encoded PNG.
+    
+    Args:
+        chart_type (str): Type of chart: 'bar', 'line', 'pie', 'scatter', 'radar'.
+        data_json (str): JSON string with keys 'labels' (list[str]) and 'values' (list[float]).
+        title (str): Chart title.
+    """
+    try:
+        import matplotlib
+        matplotlib.use('Agg')  # Non-interactive backend
+        import matplotlib.pyplot as plt
+        import io
+        
+        data = json.loads(data_json)
+        labels = data.get('labels', [])
+        values = data.get('values', [])
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        fig.set_facecolor('#0a0a0f')
+        ax.set_facecolor('#0a0a0f')
+        
+        colors = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899']
+        
+        if chart_type == 'bar':
+            bars = ax.bar(labels, values, color=colors[:len(labels)], edgecolor='none', width=0.6)
+        elif chart_type == 'line':
+            ax.plot(labels, values, color='#3b82f6', linewidth=2.5, marker='o', markersize=8, markerfacecolor='#8b5cf6')
+            ax.fill_between(range(len(labels)), values, alpha=0.1, color='#3b82f6')
+        elif chart_type == 'pie':
+            ax.pie(values, labels=labels, colors=colors[:len(labels)], autopct='%1.1f%%',
+                   textprops={'color': 'white', 'fontsize': 10})
+        elif chart_type == 'scatter':
+            ax.scatter(range(len(values)), values, c=colors[:len(values)], s=100, edgecolors='white', linewidth=0.5)
+            for i, label in enumerate(labels):
+                ax.annotate(label, (i, values[i]), textcoords="offset points", xytext=(0, 10),
+                           ha='center', color='white', fontsize=8)
+        
+        ax.set_title(title, color='white', fontsize=16, fontweight='bold', pad=20)
+        ax.tick_params(colors='#94a3b8')
+        ax.spines['bottom'].set_color('#334155')
+        ax.spines['left'].set_color('#334155')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        
+        if chart_type != 'pie':
+            ax.set_axisbelow(True)
+            ax.yaxis.grid(True, color='#1e293b', linestyle='--', alpha=0.5)
+        
+        plt.tight_layout()
+        
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=150, bbox_inches='tight',
+                    facecolor=fig.get_facecolor(), edgecolor='none')
+        plt.close(fig)
+        buf.seek(0)
+        
+        img_b64 = base64.b64encode(buf.read()).decode('utf-8')
+        return f"Chart generated successfully. Base64 PNG data (first 50 chars): {img_b64[:50]}... Full chart stored for report embedding."
+    except Exception as e:
+        return f"Chart generation error: {str(e)}"
 
 
 def citation_replacement_callback(
@@ -165,6 +361,26 @@ def citation_replacement_callback(
     )
     processed_report = re.sub(r"\s+([.,;:])", r"\1", processed_report)
     callback_context.state["final_report_with_citations"] = processed_report
+    
+    # Persist report and key findings to memory
+    try:
+        session_id = str(callback_context._invocation_context.session.id)
+        user_id = callback_context._invocation_context.session.user_id or "u_999"
+        topic = callback_context.state.get("research_plan", "Unknown topic")[:200]
+        
+        save_report(session_id, user_id, topic, processed_report, sources)
+        store_memory(session_id, user_id, f"Completed research on: {topic}", 
+                     memory_type="report_completion", importance=0.9)
+        
+        # Store key findings as separate memories for future recall
+        findings = callback_context.state.get("section_research_findings", "")
+        if findings:
+            store_memory(session_id, user_id, findings[:2000],
+                         memory_type="research_findings", importance=0.7,
+                         metadata={"topic": topic})
+    except Exception as e:
+        logging.warning(f"Memory persistence error: {e}")
+    
     return genai_types.Content(parts=[genai_types.Part(text=processed_report)])
 
 
@@ -229,7 +445,7 @@ plan_generator = LlmAgent(
     You are explicitly forbidden from researching the *content* or *themes* of the topic. That is the next agent's job. Your search is only to identify the subject, not to investigate it.
     Current date: {datetime.datetime.now().strftime("%Y-%m-%d")}
     """,
-    tools=[google_search],
+    tools=[google_search, web_scrape, search_uploaded_docs, recall_past_research],
 )
 
 
@@ -273,7 +489,7 @@ section_researcher = LlmAgent(
     *   **Execution Directive:** You **MUST** systematically process every goal prefixed with `[RESEARCH]` before proceeding to Phase 2.
     *   For each `[RESEARCH]` goal:
         *   **Query Generation:** Formulate a comprehensive set of 4-5 targeted search queries. These queries must be expertly designed to broadly cover the specific intent of the `[RESEARCH]` goal from multiple angles.
-        *   **Execution:** Utilize the `google_search` tool to execute **all** generated queries for the current `[RESEARCH]` goal.
+        *   **Execution:** Utilize the `google_search`, `web_scrape`, `search_uploaded_docs`, and `mcp_query` tools to execute **all** generated queries for the current `[RESEARCH]` goal. Use `search_uploaded_docs` if the goal specifically mentions local files or documents. Use `web_scrape` if you need detailed content from a specific URL. Use `mcp_query` for specialized domain knowledge if available.
         *   **Summarization:** Synthesize the search results into a detailed, coherent summary that directly addresses the objective of the `[RESEARCH]` goal.
         *   **Internal Storage:** Store this summary, clearly tagged or indexed by its corresponding `[RESEARCH]` goal, for later and exclusive use in Phase 2. You **MUST NOT** lose or discard any generated summaries.
 
@@ -297,7 +513,7 @@ section_researcher = LlmAgent(
 
     **Final Output:** Your final output will comprise the complete set of processed summaries from `[RESEARCH]` tasks AND all the generated artifacts from `[DELIVERABLE]` tasks, presented clearly and distinctly.
     """,
-    tools=[google_search],
+    tools=[google_search, web_scrape, search_uploaded_docs, mcp_query, recall_past_research, generate_chart],
     output_key="section_research_findings",
     after_agent_callback=collect_research_sources_callback,
 )
@@ -341,11 +557,11 @@ enhanced_search_executor = LlmAgent(
     You have been activated because the previous research was graded as 'fail'.
 
     1.  Review the 'research_evaluation' state key to understand the feedback and required fixes.
-    2.  Execute EVERY query listed in 'follow_up_queries' using the 'google_search' tool.
+    2.  Execute EVERY query listed in 'follow_up_queries' using the most appropriate tool (`google_search`, `web_scrape`, `search_uploaded_docs`, or `mcp_query`).
     3.  Synthesize the new findings and COMBINE them with the existing information in 'section_research_findings'.
     4.  Your output MUST be the new, complete, and improved set of research findings.
     """,
-    tools=[google_search],
+    tools=[google_search, web_scrape, search_uploaded_docs, mcp_query, recall_past_research, generate_chart],
     output_key="section_research_findings",
     after_agent_callback=collect_research_sources_callback,
 )

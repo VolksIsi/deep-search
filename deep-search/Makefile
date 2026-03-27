@@ -63,3 +63,28 @@ test:
 	uv sync --dev
 	uv run pytest tests/unit && uv run pytest tests/integration
 
+# --- Docker ---
+docker-build:
+	docker build -t allmighty-deep-search .
+
+docker-run:
+	docker run -p 8080:8080 \
+		-e GOOGLE_API_KEY=$${GOOGLE_API_KEY} \
+		-e ENABLE_SCHEDULER=true \
+		-e ENABLE_COMPETITIVE_INTEL=true \
+		-v $$(pwd)/data:/app/data \
+		allmighty-deep-search
+
+# --- Cloud Run Deployment ---
+cloud-deploy:
+	gcloud builds submit --config=cloudbuild.yaml .
+
+cloud-run-direct:
+	gcloud run deploy allmighty-deep-search \
+		--source . \
+		--region us-central1 \
+		--allow-unauthenticated \
+		--memory 2Gi \
+		--cpu 2 \
+		--timeout 3600 \
+		--set-env-vars "GOOGLE_CLOUD_PROJECT=$${GOOGLE_CLOUD_PROJECT},ENABLE_SCHEDULER=true,ENABLE_COMPETITIVE_INTEL=true"

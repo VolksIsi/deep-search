@@ -1,244 +1,81 @@
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-} from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Loader2,
-  Activity,
-  Info,
-  Search,
-  TextSearch,
-  Brain,
-  Pen,
-  ChevronDown,
-  ChevronUp,
-  Link,
-} from "lucide-react";
-import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import React from "react";
+import { Search, Globe, Cpu, CheckCircle, Brain, Layers, Database } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
-export interface ProcessedEvent {
+interface TimelineEvent {
   title: string;
   data: any;
 }
 
 interface ActivityTimelineProps {
-  processedEvents: ProcessedEvent[];
-  isLoading: boolean;
-  websiteCount: number;
+  events: TimelineEvent[];
 }
 
-export function ActivityTimeline({
-  processedEvents,
-  isLoading,
-  websiteCount,
-}: ActivityTimelineProps) {
-  const [isTimelineCollapsed, setIsTimelineCollapsed] =
-    useState<boolean>(false);
-
-  const formatEventData = (data: any): string => {
-    // Handle new structured data types
-    if (typeof data === "object" && data !== null && data.type) {
-      switch (data.type) {
-        case 'functionCall':
-          return `Calling function: ${data.name}\nArguments: ${JSON.stringify(data.args, null, 2)}`;
-        case 'functionResponse':
-          return `Function ${data.name} response:\n${JSON.stringify(data.response, null, 2)}`;
-        case 'text':
-          return data.content;
-        case 'sources':
-          const sources = data.content as Record<string, { title: string; url: string }>;
-          if (Object.keys(sources).length === 0) {
-            return "No sources found.";
-          }
-          return Object.values(sources)
-            .map(source => `[${source.title || 'Untitled Source'}](${source.url})`).join(', ');
-        default:
-          return JSON.stringify(data, null, 2);
-      }
-    }
+export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({ events }) => {
+  const getIcon = (title: string, data: any) => {
+    const t = title.toLowerCase();
+    const d = data.type?.toLowerCase() || "";
     
-    // Existing logic for backward compatibility
-    if (typeof data === "string") {
-      // Try to parse as JSON first
-      try {
-        const parsed = JSON.parse(data);
-        return JSON.stringify(parsed, null, 2);
-      } catch {
-        // If not JSON, return as string (could be markdown)
-        return data;
-      }
-    } else if (Array.isArray(data)) {
-      return data.join(", ");
-    } else if (typeof data === "object" && data !== null) {
-      return JSON.stringify(data, null, 2);
-    }
-    return String(data);
-  };
-
-  const isJsonData = (data: any): boolean => {
-    // Handle new structured data types
-    if (typeof data === "object" && data !== null && data.type) {
-      if (data.type === 'sources') {
-        return false; // Let ReactMarkdown handle this
-      }
-      return data.type === 'functionCall' || data.type === 'functionResponse';
-    }
+    if (t.includes("search") || d.includes("google_search")) return <Search className="w-4 h-4 text-blue-400" />;
+    if (t.includes("scrape") || d.includes("web_scrape")) return <Globe className="w-4 h-4 text-emerald-400" />;
+    if (t.includes("document") || d.includes("search_uploaded_docs")) return <Database className="w-4 h-4 text-purple-400" />;
+    if (t.includes("mcp") || d.includes("mcp_query")) return <Cpu className="w-4 h-4 text-orange-400" />;
+    if (t.includes("plan") || t.includes("strategy")) return <Layers className="w-4 h-4 text-indigo-400" />;
+    if (t.includes("evaluat") || t.includes("quality")) return <Brain className="w-4 h-4 text-pink-400" />;
     
-    // Existing logic
-    if (typeof data === "string") {
-      try {
-        JSON.parse(data);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-    return typeof data === "object" && data !== null;
-  };
-  const getEventIcon = (title: string, index: number) => {
-    if (index === 0 && isLoading && processedEvents.length === 0) {
-      return <Loader2 className="h-4 w-4 text-neutral-400 animate-spin" />;
-    }
-    if (title.toLowerCase().includes("function call")) {
-      return <Activity className="h-4 w-4 text-blue-400" />;
-    } else if (title.toLowerCase().includes("function response")) {
-      return <Activity className="h-4 w-4 text-green-400" />;
-    } else if (title.toLowerCase().includes("generating")) {
-      return <TextSearch className="h-4 w-4 text-neutral-400" />;
-    } else if (title.toLowerCase().includes("thinking")) {
-      return <Loader2 className="h-4 w-4 text-neutral-400 animate-spin" />;
-    } else if (title.toLowerCase().includes("reflection")) {
-      return <Brain className="h-4 w-4 text-neutral-400" />;
-    } else if (title.toLowerCase().includes("research")) {
-      return <Search className="h-4 w-4 text-neutral-400" />;
-    } else if (title.toLowerCase().includes("finalizing")) {
-      return <Pen className="h-4 w-4 text-neutral-400" />;
-    } else if (title.toLowerCase().includes("retrieved sources")) {
-      return <Link className="h-4 w-4 text-yellow-400" />;
-    }
-    return <Activity className="h-4 w-4 text-neutral-400" />;
+    return <CheckCircle className="w-4 h-4 text-blue-400" />;
   };
 
-  useEffect(() => {
-    if (!isLoading && processedEvents.length !== 0) {
-      setIsTimelineCollapsed(true);
-    }
-  }, [isLoading, processedEvents]);
   return (
-    <Card className={`border-none rounded-lg bg-neutral-700 ${isTimelineCollapsed ? "h-10 py-2" : "max-h-96 py-2"}`}>
-      <CardHeader className="py-0">
-        <CardDescription className="flex items-center justify-between">
-          <div
-            className="flex items-center justify-start text-sm w-full cursor-pointer gap-2 text-neutral-100"
-            onClick={() => setIsTimelineCollapsed(!isTimelineCollapsed)}
-          >
-            <span>Research</span>
-            {websiteCount > 0 && (
-              <span className="text-xs bg-neutral-600 px-2 py-0.5 rounded-full">
-                {websiteCount} websites
-              </span>
-            )}
-            {isTimelineCollapsed ? (
-              <ChevronDown className="h-4 w-4 mr-2" />
-            ) : (
-              <ChevronUp className="h-4 w-4 mr-2" />
-            )}
-          </div>
-        </CardDescription>
-      </CardHeader>
-      {!isTimelineCollapsed && (
-        <ScrollArea className="max-h-80 overflow-y-auto">
-          <CardContent>
-            {isLoading && processedEvents.length === 0 && (
-              <div className="relative pl-8 pb-4">
-                <div className="absolute left-3 top-3.5 h-full w-0.5 bg-neutral-800" />
-                <div className="absolute left-0.5 top-2 h-5 w-5 rounded-full bg-neutral-800 flex items-center justify-center ring-4 ring-neutral-900">
-                  <Loader2 className="h-3 w-3 text-neutral-400 animate-spin" />
-                </div>
-                <div>
-                  <p className="text-sm text-neutral-300 font-medium">
-                    Thinking...
-                  </p>
-                </div>
-              </div>
-            )}
-            {processedEvents.length > 0 ? (
-              <div className="space-y-0">
-                {processedEvents.map((eventItem, index) => (
-                  <div key={index} className="relative pl-8 pb-4">
-                    {index < processedEvents.length - 1 ||
-                    (isLoading && index === processedEvents.length - 1) ? (
-                      <div className="absolute left-3 top-3.5 h-full w-0.5 bg-neutral-600" />
-                    ) : null}
-                    <div className="absolute left-0.5 top-2 h-6 w-6 rounded-full bg-neutral-600 flex items-center justify-center ring-4 ring-neutral-700">
-                      {getEventIcon(eventItem.title, index)}
-                    </div>
-                    <div>
-                      <p className="text-sm text-neutral-200 font-medium mb-0.5">
-                        {eventItem.title}
-                      </p>
-                      <div className="text-xs text-neutral-300 leading-relaxed">
-                        {isJsonData(eventItem.data) ? (
-                          <pre className="bg-neutral-800 p-2 rounded text-xs overflow-x-auto whitespace-pre-wrap">
-                            {formatEventData(eventItem.data)}
-                          </pre>
-                        ) : (
-                          <ReactMarkdown
-                            components={{
-                              p: ({ children }) => <span>{children}</span>,
-                              a: ({ href, children }) => (
-                                <a
-                                  href={href}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-400 hover:text-blue-300 underline"
-                                >
-                                  {children}
-                                </a>
-                              ),
-                              code: ({ children }) => (
-                                <code className="bg-neutral-800 px-1 py-0.5 rounded text-xs">
-                                  {children}
-                                </code>
-                              ),
-                            }}
-                          >
-                            {formatEventData(eventItem.data)}
-                          </ReactMarkdown>
-                        )}
-                      </div>
-                    </div>
+    <div className="space-y-4 px-2 w-full max-w-3xl">
+      <div className="flex items-center gap-3 mb-6">
+        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-500 bg-neutral-900/50 px-3 py-1 rounded-full border border-neutral-800">
+          Agent Execution Logs
+        </h3>
+        <div className="h-px flex-1 bg-gradient-to-r from-neutral-800 to-transparent"></div>
+      </div>
+      
+      <div className="space-y-3 relative pl-4 border-l border-neutral-800/50">
+        <AnimatePresence initial={false}>
+          {events.map((event, idx) => (
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, delay: idx * 0.05 }}
+              className="relative group"
+            >
+              <div className="absolute -left-[21px] top-4 w-2 h-2 rounded-full bg-neutral-700 border-2 border-neutral-950 group-hover:bg-blue-500 transition-colors"></div>
+              
+              <div className="bg-neutral-900/40 backdrop-blur-sm border border-neutral-800/60 rounded-xl p-4 hover:border-neutral-700 transition-all shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-neutral-800/50 rounded-lg border border-neutral-700/30">
+                    {getIcon(event.title, event.data)}
                   </div>
-                ))}
-                {isLoading && processedEvents.length > 0 && (
-                  <div className="relative pl-8 pb-4">
-                    <div className="absolute left-0.5 top-2 h-5 w-5 rounded-full bg-neutral-600 flex items-center justify-center ring-4 ring-neutral-700">
-                      <Loader2 className="h-3 w-3 text-neutral-400 animate-spin" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-neutral-300 font-medium">
-                        Thinking...
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-bold text-neutral-200 truncate">{event.title}</h4>
+                    {event.data.content && typeof event.data.content === 'string' && (
+                      <p className="text-xs text-neutral-500 mt-1 line-clamp-1 italic font-medium">
+                        {event.data.content.substring(0, 100)}...
                       </p>
-                    </div>
+                    )}
+                  </div>
+                </div>
+                
+                {event.data.type === 'sources' && event.data.content && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {Object.values(event.data.content).slice(0, 3).map((source: any, i: number) => (
+                      <div key={i} className="text-[10px] px-2 py-0.5 bg-blue-600/5 border border-blue-500/20 text-blue-400 rounded-md font-bold">
+                        {source.domain || 'Source'}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
-            ) : !isLoading ? ( // Only show "No activity" if not loading and no events
-              <div className="flex flex-col items-center justify-center h-full text-neutral-500 pt-10">
-                <Info className="h-6 w-6 mb-3" />
-                <p className="text-sm">No activity to display.</p>
-                <p className="text-xs text-neutral-600 mt-1">
-                  Timeline will update during processing.
-                </p>
-              </div>
-            ) : null}
-          </CardContent>
-        </ScrollArea>
-      )}
-    </Card>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+    </div>
   );
-}
+};

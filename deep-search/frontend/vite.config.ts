@@ -1,7 +1,10 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import tailwindcss from "@tailwindcss/vite";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -9,30 +12,27 @@ export default defineConfig({
   base: "/app/",
   resolve: {
     alias: {
-      "@": path.resolve(new URL(".", import.meta.url).pathname, "./src"),
+      "@": path.resolve(__dirname, "./src"),
     },
   },
   server: {
-    // Makes the server accessible on the local network (e.g., for mobile testing)
     host: true,
-    // Should be disabled or limited when deployed in untrusted network environments.
     allowedHosts: true,
     proxy: {
-      // Proxy API requests to the backend server
       "/api": {
-        target: "http://127.0.0.1:8000", // Default backend address
+        target: "http://127.0.0.1:8000",
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path.replace(/^\/api/, ''),
-        configure: (proxy, options) => {
-          proxy.on('error', (err, req, res) => {
+        rewrite: (p) => p.replace(/^\/api/, ''),
+        configure: (proxy: any) => {
+          proxy.on('error', (err: any) => {
             console.log('proxy error', err);
           });
-          proxy.on('proxyReq', (proxyReq, req, res) => {
-            console.log('Sending Request to the Target:', req.method, req.url);
+          proxy.on('proxyReq', (_proxyReq: any, req: any) => {
+            console.log('Sending Request:', req.method, req.url);
           });
-          proxy.on('proxyRes', (proxyRes, req, res) => {
-            console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
+          proxy.on('proxyRes', (proxyRes: any, req: any) => {
+            console.log('Response:', proxyRes.statusCode, req.url);
           });
         },
       },
