@@ -46,5 +46,5 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8080
 
-# Start the ADK API server with frontend static files
-CMD ["python", "-m", "uvicorn", "app.agent_engine_app:agent_engine", "--host", "0.0.0.0", "--port", "8080"]
+# Start the unified Allmighty Research Platform server (Agents + UI)
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
