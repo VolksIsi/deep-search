@@ -2,17 +2,24 @@
 FROM node:20-alpine AS frontend-builder
 WORKDIR /frontend
 COPY frontend/package*.json ./
-RUN npm ci --no-audit
+RUN npm install --legacy-peer-deps
 COPY frontend/ ./
 RUN npm run build
 
 # === Stage 2: Python Runtime ===
 FROM python:3.12-slim AS runtime
 
-# Install system deps for WeasyPrint + matplotlib
+# Install system deps for WeasyPrint + matplotlib (Debian Trixie Compatibility)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 \
-    libffi-dev libcairo2 libglib2.0-0 fonts-dejavu-core \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libgdk-pixbuf-xlib-2.0-0 \
+    libffi-dev \
+    libcairo2 \
+    libglib2.0-0 \
+    fonts-dejavu-core \
+    shared-mime-info \
+    libharfbuzz0b \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
