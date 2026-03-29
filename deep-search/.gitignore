@@ -200,3 +200,9 @@ my_env.tfvars
 
 # A2A Inspector
 tools/a2a-inspector/
+
+# Large binaries & generated files
+gcloud_sdk.zip
+google-cloud-sdk/
+data/
+logs.json
