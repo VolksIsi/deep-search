@@ -18,26 +18,32 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Load environment variables from .env file in the app directory
-env_path = Path(__file__).parent / ".env"
-load_dotenv(dotenv_path=env_path)
+# Load environment variables (searches for .env in current and parent directories)
+load_dotenv()
 
 # Authentication Configuration:
 # By default, uses AI Studio with GOOGLE_API_KEY from .env file.
 # To use Vertex AI instead, set GOOGLE_GENAI_USE_VERTEXAI=TRUE in your .env
 # and ensure you have Google Cloud credentials configured.
 
+# Hard assignment for Vertex AI global endpoint to avoid 404s in Cloud Run
+os.environ["GOOGLE_CLOUD_LOCATION"] = "global"
+
 if os.getenv("GOOGLE_API_KEY"):
     # AI Studio mode (default): Use API key authentication
     os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "False")
 else:
     # Vertex AI mode: Fall back to Google Cloud credentials
-    import google.auth
-
-    _, project_id = google.auth.default()
-    os.environ.setdefault("GOOGLE_CLOUD_PROJECT", project_id)
-    os.environ["GOOGLE_CLOUD_LOCATION"] = "global"
-    os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")
+    try:
+        import google.auth
+        _, project_id = google.auth.default()
+        os.environ.setdefault("GOOGLE_CLOUD_PROJECT", str(project_id))
+        os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")
+    except Exception:
+        # If no credentials found and no API key, we still allow starting
+        # but the agent calls will likely fail until configured.
+        os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "False")
+        os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "deep-search-local")
 
 
 @dataclass
@@ -58,8 +64,8 @@ class ResearchConfiguration:
         gcp_region (str): Google Cloud region for deployment.
     """
 
-    critic_model: str = os.getenv("CRITIC_MODEL", "gemini-2.0-flash")
-    worker_model: str = os.getenv("WORKER_MODEL", "gemini-2.0-flash")
+    critic_model: str = os.getenv("CRITIC_MODEL", "gemini-2.5-flash")
+    worker_model: str = os.getenv("WORKER_MODEL", "gemini-2.5-flash")
     max_search_iterations: int = int(os.getenv("MAX_SEARCH_ITERATIONS", "5"))
     max_parallel_workers: int = int(os.getenv("MAX_PARALLEL_WORKERS", "3"))
     data_dir: Path = Path(os.getenv("DATA_DIR", "./data"))

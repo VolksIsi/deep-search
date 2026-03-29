@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c//**)",
+      "Bash(cmd.exe //c \"where gcloud\")",
+      "Bash(powershell.exe -Command \"\\(New-Object Net.WebClient\\).DownloadFile\\(''https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe'', ''C:\\\\Users\\\\volka\\\\Desktop\\\\GoogleCloudSDKInstaller.exe''\\)\")",
+      "Bash(\"/c/Users/volka/AppData/Local/Google/Cloud SDK/google-cloud-sdk/bin/gcloud.cmd\" --version)",
+      "Bash(powershell.exe -Command \"Get-ChildItem ''C:\\\\Users\\\\volka\\\\AppData\\\\Local\\\\Google'' -Directory\")",
+      "WebFetch(domain:google.github.io)",
+      "Bash(powershell.exe -Command \"Get-ChildItem -Path ''C:\\\\Program Files'',''C:\\\\Program Files \\(x86\\)'',''C:\\\\Users\\\\volka\\\\AppData\\\\Local'' -Recurse -Filter ''gcloud.cmd'' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName\")",
+      "Bash(\"/c/Users/volka/AppData/Local/Google/Cloud SDK/google-cloud-sdk/bin/gcloud\" --version)",
+      "Bash(\"/c/Program Files \\(x86\\)/Google/Cloud SDK/google-cloud-sdk/bin/gcloud.cmd\" --version)",
+      "Bash(\"/c/Users/volka/AppData/Local/Google/Cloud SDK/google-cloud-sdk/bin/gcloud\" config set project project-3ca39165-fb2e-4579-84e)",
+      "Bash(\"/c/Users/volka/AppData/Local/Google/Cloud SDK/google-cloud-sdk/bin/gcloud\" builds submit --tag us-central1-docker.pkg.dev/project-3ca39165-fb2e-4579-84e/deep-search-repo/allmighty-deep-search:latest .)",
+      "Bash(\"/c/Users/volka/AppData/Local/Google/Cloud SDK/google-cloud-sdk/bin/gcloud\" run deploy allmighty-deep-search --image us-central1-docker.pkg.dev/project-3ca39165-fb2e-4579-84e/deep-search-repo/allmighty-deep-search:latest --region us-central1 --platform managed --allow-unauthenticated --memory 2Gi --cpu 2 --timeout 3600 --concurrency 80 --min-instances 0 --max-instances 10)",
+      "WebFetch(domain:allmighty-deep-search-357167321669.us-central1.run.app)",
+      "Bash(\"/c/Users/volka/AppData/Local/Google/Cloud SDK/google-cloud-sdk/bin/gcloud\" run services logs read allmighty-deep-search --region us-central1 --limit 30)",
+      "Bash(\"/c/Users/volka/AppData/Local/Google/Cloud SDK/google-cloud-sdk/bin/gcloud\" run services logs read allmighty-deep-search --region us-central1 --limit 50)",
+      "WebFetch(domain:raw.githubusercontent.com)"
+    ]
+  }
+}

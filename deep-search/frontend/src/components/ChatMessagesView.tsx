@@ -1,8 +1,10 @@
 import React, { useEffect } from "react";
-import { Globe, Sparkles, Loader2, Link2, FileText } from "lucide-react";
+import { Globe, Sparkles, Loader2, FileText } from "lucide-react";
 import { ActivityTimeline } from "./ActivityTimeline";
+import { TaskBoard } from "./TaskBoard";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { InputForm } from "./InputForm";
 
 interface Message {
   type: "human" | "ai";
@@ -27,6 +29,7 @@ export const ChatMessagesView: React.FC<ChatMessagesViewProps> = ({
   messages,
   isLoading,
   scrollAreaRef,
+  onSubmit, // Added missing onSubmit prop
   onCancel,
   messageEvents,
   websiteCount,
@@ -95,8 +98,42 @@ export const ChatMessagesView: React.FC<ChatMessagesViewProps> = ({
                   </div>
                 )}
                 
+                {/* Task Board for Research Plans */}
+                {msg.content && msg.agent === "plan_generator" && (
+                  <div className="w-full max-w-3xl animate-fadeIn space-y-6">
+                    <TaskBoard 
+                      tasks={msg.content
+                        .split("\n")
+                        .filter(line => line.includes("[RESEARCH]"))
+                        .map((line, i) => ({
+                          id: `task_${i}`,
+                          title: line.replace(/\[RESEARCH\]\s*/g, ""),
+                          status: i === 0 && isLoading ? "running" : "pending"
+                        }))
+                      } 
+                    />
+
+                    {/* Interactive Approval Button (only show on the last message and when not loading) */}
+                    {!isLoading && messages[messages.length - 1].id === msg.id && (
+                      <div className="flex flex-col items-center gap-4 py-8 px-6 bg-blue-500/5 border border-blue-500/10 rounded-3xl backdrop-blur-sm animate-fadeInUp">
+                        <div className="text-center space-y-1">
+                          <p className="text-sm font-bold text-blue-100">Research Strategy Ready</p>
+                          <p className="text-[10px] text-blue-400 uppercase tracking-widest font-black">Authorization Required</p>
+                        </div>
+                        <button 
+                          onClick={() => onSubmit("I approve the plan. Proceed with the research.")}
+                          className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-full font-bold text-sm shadow-xl shadow-blue-900/40 transition-all flex items-center gap-2 group active:scale-95"
+                        >
+                          <Sparkles className="w-4 h-4 group-hover:rotate-12 transition-transform" /> 
+                          Approve & Execute Research
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
                 {/* Final Response Content */}
-                {msg.content && (
+                {msg.content && msg.agent !== "plan_generator" && (
                   <div className={`prose prose-invert prose-blue max-w-4xl bg-neutral-900/40 border border-neutral-800/60 rounded-3xl p-8 shadow-2xl animate-fadeInUp ${msg.finalReportWithCitations ? 'border-l-4 border-l-blue-600' : ''}`}>
                     {msg.finalReportWithCitations && (
                       <div className="flex items-center gap-2 mb-6 text-blue-400 font-bold uppercase tracking-widest text-[10px]">
@@ -118,15 +155,52 @@ export const ChatMessagesView: React.FC<ChatMessagesViewProps> = ({
                             href={href} 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-blue-400 font-semibold no-underline hover:text-blue-300 hover:underline transition-all"
+                            className="text-blue-400 font-semibold no-underline hover:text-blue-300 hover:underline transition-all"
                           >
-                            {children} <Link2 className="w-3 h-3" />
+                            {children}
                           </a>
                         )
                       }}
                     >
                       {msg.content}
                     </ReactMarkdown>
+
+                    {/* Source Cards Grid */}
+                    {msg.finalReportWithCitations && (
+                      <div className="mt-12 pt-8 border-t border-neutral-800">
+                        <h4 className="text-[10px] font-black text-neutral-500 uppercase tracking-[0.2em] mb-4">Verified Sources & References</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {Array.from(new Set(
+                            Array.from(msg.content.matchAll(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g)).map(m => m[2])
+                          )).map((url) => {
+                            const domain = new URL(url).hostname;
+                            return (
+                              <a 
+                                key={url}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/5 hover:border-blue-500/30 hover:bg-blue-500/[0.03] transition-all group"
+                              >
+                                <div className="w-8 h-8 rounded-lg bg-neutral-800 flex items-center justify-center border border-neutral-700 overflow-hidden shrink-0">
+                                  <img 
+                                    src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`} 
+                                    alt="" 
+                                    className="w-4 h-4"
+                                  />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-neutral-200 truncate group-hover:text-blue-300 transition-colors">
+                                    {domain}
+                                  </p>
+                                  <p className="text-[9px] text-neutral-500 truncate">{url}</p>
+                                </div>
+                              </a>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -152,15 +226,25 @@ export const ChatMessagesView: React.FC<ChatMessagesViewProps> = ({
       </div>
 
       {/* Footer Area */}
-      <footer className="px-6 py-6 border-t border-neutral-800/10 bg-gradient-to-t from-neutral-950 to-transparent">
-        <div className="max-w-3xl mx-auto relative group">
-           <button 
-             onClick={() => window.location.reload()}
-             className="w-full py-4 px-6 bg-neutral-900 border border-neutral-800 rounded-2xl flex items-center justify-between hover:border-neutral-700 transition-all text-neutral-500 shadow-xl shadow-black/40"
-           >
-             <span className="text-sm font-medium">Start a new research thread...</span>
-             <Sparkles className="w-5 h-5 text-blue-500" />
-           </button>
+      <footer className="px-6 py-4 border-t border-white/5 bg-neutral-900/10 flex items-center justify-between">
+        <div className="flex items-center gap-6">
+          <div className="flex flex-col">
+            <span className="text-[9px] text-neutral-500 uppercase tracking-widest font-bold">Neural Link</span>
+            <span className="text-[10px] text-emerald-400 font-mono">ENCRYPTED_AES256</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[9px] text-neutral-500 uppercase tracking-widest font-bold">Active Nodes</span>
+            <span className="text-[10px] text-blue-400 font-mono">1.2.9_STABLE</span>
+          </div>
+        </div>
+        
+        <div className="max-w-md flex-1 px-8 h-10">
+           <InputForm onSubmit={onSubmit} isLoading={isLoading} context="chat" />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+          <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">System Live</span>
         </div>
       </footer>
     </div>

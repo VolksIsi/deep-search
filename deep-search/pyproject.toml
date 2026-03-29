@@ -11,7 +11,7 @@ authors = [
 ]
 license = {text = "Apache License 2.0"}
 readme = {text = "Almighty Deep Search platform", content-type = "text/plain"}
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10"
 
 dependencies = [
     "google-adk>=1.8.0",

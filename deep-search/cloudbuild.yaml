@@ -1,56 +1,46 @@
 steps:
   # Build and push Docker image
-  - name: 'gcr.io/cloud-builders/docker'
+  - name: "gcr.io/cloud-builders/docker"
     args:
-      - 'build'
-      - '-t'
-      - 'gcr.io/$PROJECT_ID/allmighty-deep-search:$COMMIT_SHA'
-      - '-t'
-      - 'gcr.io/$PROJECT_ID/allmighty-deep-search:latest'
-      - '.'
+      - "build"
+      - "-t"
+      - "us-central1-docker.pkg.dev/project-3ca39165-fb2e-4579-84e/deep-search-repo/allmighty-deep-search:latest"
+      - "."
 
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/allmighty-deep-search:$COMMIT_SHA']
-
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/allmighty-deep-search:latest']
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "us-central1-docker.pkg.dev/project-3ca39165-fb2e-4579-84e/deep-search-repo/allmighty-deep-search:latest"]
 
   # Deploy to Cloud Run
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "gcloud"
     args:
-      - 'run'
-      - 'deploy'
-      - 'allmighty-deep-search'
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/allmighty-deep-search:$COMMIT_SHA'
-      - '--region'
-      - '${_REGION}'
-      - '--platform'
-      - 'managed'
-      - '--allow-unauthenticated'
-      - '--memory'
-      - '2Gi'
-      - '--cpu'
-      - '2'
-      - '--timeout'
-      - '3600'
-      - '--concurrency'
-      - '80'
-      - '--min-instances'
-      - '0'
-      - '--max-instances'
-      - '10'
-      - '--set-env-vars'
-      - 'GOOGLE_CLOUD_PROJECT=$PROJECT_ID,DATA_DIR=/app/data,MEMORY_DB_PATH=/app/data/memory.db,ENABLE_SCHEDULER=true,ENABLE_COMPETITIVE_INTEL=true'
-
-substitutions:
-  _REGION: us-central1
+      - "run"
+      - "deploy"
+      - "allmighty-deep-search"
+      - "--image"
+      - "us-central1-docker.pkg.dev/project-3ca39165-fb2e-4579-84e/deep-search-repo/allmighty-deep-search:latest"
+      - "--region"
+      - "us-central1"
+      - "--platform"
+      - "managed"
+      - "--allow-unauthenticated"
+      - "--memory"
+      - "2Gi"
+      - "--cpu"
+      - "2"
+      - "--timeout"
+      - "3600"
+      - "--concurrency"
+      - "80"
+      - "--min-instances"
+      - "0"
+      - "--max-instances"
+      - "10"
+      - "--set-env-vars"
+      - "GOOGLE_CLOUD_PROJECT=project-3ca39165-fb2e-4579-84e,DATA_DIR=/app/data,MEMORY_DB_PATH=/app/data/memory.db,ENABLE_SCHEDULER=true,ENABLE_COMPETITIVE_INTEL=true"
 
 options:
-  logging: CLOUD_LOGGING_ONLY
-  machineType: 'E2_HIGHCPU_8'
+  machineType: "E2_HIGHCPU_8"
 
 images:
-  - 'gcr.io/$PROJECT_ID/allmighty-deep-search:$COMMIT_SHA'
-  - 'gcr.io/$PROJECT_ID/allmighty-deep-search:latest'
+  - "us-central1-docker.pkg.dev/project-3ca39165-fb2e-4579-84e/deep-search-repo/allmighty-deep-search:latest"

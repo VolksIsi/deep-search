@@ -23,18 +23,21 @@ export default defineConfig({
         target: "http://127.0.0.1:8000",
         changeOrigin: true,
         secure: false,
-        rewrite: (p) => p.replace(/^\/api/, ''),
-        configure: (proxy: any) => {
-          proxy.on('error', (err: any) => {
-            console.log('proxy error', err);
-          });
-          proxy.on('proxyReq', (_proxyReq: any, req: any) => {
-            console.log('Sending Request:', req.method, req.url);
-          });
-          proxy.on('proxyRes', (proxyRes: any, req: any) => {
-            console.log('Response:', proxyRes.statusCode, req.url);
-          });
-        },
+      },
+      "/run_sse": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+        secure: false,
+      },
+      "/apps": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+        secure: false,
+      },
+      "/docs": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+        secure: false,
       },
     },
   },

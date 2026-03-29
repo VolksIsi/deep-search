@@ -425,11 +425,10 @@ plan_generator = LlmAgent(
     - **`[RESEARCH]`**: For goals that primarily involve information gathering, investigation, analysis, or data collection (these require search tool usage by a researcher).
     - **`[DELIVERABLE]`**: For goals that involve synthesizing collected information, creating structured outputs (e.g., tables, charts, summaries, reports), or compiling final output artifacts (these are executed AFTER research tasks, often without further search).
 
-    **INITIAL RULE: Your initial output MUST start with a bulleted list of 5 action-oriented research goals or key questions, followed by any *inherently implied* deliverables.**
-    - All initial 5 goals will be classified as `[RESEARCH]` tasks.
-    - A good goal for `[RESEARCH]` starts with a verb like "Analyze," "Identify," "Investigate."
-    - A bad output is a statement of fact like "The event was in April 2024."
-    - **Proactive Implied Deliverables (Initial):** If any of your initial 5 `[RESEARCH]` goals inherently imply a standard output or deliverable (e.g., a comparative analysis suggesting a comparison table, or a comprehensive review suggesting a summary document), you MUST add these as additional, distinct goals immediately after the initial 5. Phrase these as *synthesis or output creation actions* (e.g., "Create a summary," "Develop a comparison," "Compile a report") and prefix them with `[DELIVERABLE][IMPLIED]`.
+    **INITIAL RULE: Create a comprehensive roadmap. Your initial output MUST start with a bulleted list of 5-7 deep-dive research goals, followed by structurally-implied deliverables.**
+    - All initial search-based goals will be classified as `[RESEARCH]` tasks.
+    - Focus on multi-perspective analysis: Investigative, Comparative, Historical, and Futuristic views.
+    - **Proactive Implied Deliverables (Initial):** Always suggest at least 2 structured outputs (e.g. Markdown tables, charts, or detailed executive summaries) prefixed with `[DELIVERABLE][IMPLIED]`.
 
     **REFINEMENT RULE**:
     - **Integrate Feedback & Mark Changes:** When incorporating user feedback, make targeted modifications to existing bullet points. Add `[MODIFIED]` to the existing task type and status prefix (e.g., `[RESEARCH][MODIFIED]`). If the feedback introduces new goals:
@@ -445,7 +444,7 @@ plan_generator = LlmAgent(
     You are explicitly forbidden from researching the *content* or *themes* of the topic. That is the next agent's job. Your search is only to identify the subject, not to investigate it.
     Current date: {datetime.datetime.now().strftime("%Y-%m-%d")}
     """,
-    tools=[google_search, web_scrape, search_uploaded_docs, recall_past_research],
+    tools=[web_scrape, search_uploaded_docs, recall_past_research],
 )
 
 
@@ -513,7 +512,7 @@ section_researcher = LlmAgent(
 
     **Final Output:** Your final output will comprise the complete set of processed summaries from `[RESEARCH]` tasks AND all the generated artifacts from `[DELIVERABLE]` tasks, presented clearly and distinctly.
     """,
-    tools=[google_search, web_scrape, search_uploaded_docs, mcp_query, recall_past_research, generate_chart],
+    tools=[google_search],
     output_key="section_research_findings",
     after_agent_callback=collect_research_sources_callback,
 )
@@ -561,7 +560,7 @@ enhanced_search_executor = LlmAgent(
     3.  Synthesize the new findings and COMBINE them with the existing information in 'section_research_findings'.
     4.  Your output MUST be the new, complete, and improved set of research findings.
     """,
-    tools=[google_search, web_scrape, search_uploaded_docs, mcp_query, recall_past_research, generate_chart],
+    tools=[google_search],
     output_key="section_research_findings",
     after_agent_callback=collect_research_sources_callback,
 )

@@ -1,110 +1,362 @@
-import React from 'react';
-import { Settings, FolderUp, History, Database, BrainCircuit, Globe } from 'lucide-react';
+import React from "react";
+import {
+  BrainCircuit,
+  CalendarClock,
+  CheckCircle2,
+  Database,
+  FileText,
+  FolderUp,
+  History,
+  Mic,
+  MicOff,
+  RadioTower,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+
+export type SidebarTab = "config" | "intel" | "history" | "schedule";
 
 interface SidebarProps {
   selectedModel: string;
   setSelectedModel: (model: string) => void;
   onFileUpload: (files: FileList) => void;
   uploadedFiles: string[];
+  isListening: boolean;
+  onVoiceToggle: () => void;
+  isSpeaking: boolean;
+  onSpeakToggle: () => void;
+  canSpeak: boolean;
+  sidebarTab: SidebarTab;
+  setSidebarTab: (tab: SidebarTab) => void;
+  websiteCount: number;
+  aiMessageCount: number;
+  toolRuns: number;
+  competitors: any[];
+  alerts: any[];
+  pastReports: any[];
+  scheduledTasks: any[];
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ 
-  selectedModel, 
-  setSelectedModel, 
+interface PanelItem {
+  title: string;
+  subtitle: string;
+}
+
+const models = [
+  { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", hint: "Speed Layer" },
+  { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", hint: "Reasoning Layer" },
+  { id: "gpt-4o", name: "GPT-4o", hint: "Omni Layer" },
+  { id: "claude-3-5-sonnet", name: "Claude 3.5 Sonnet", hint: "Writing Layer" },
+];
+
+const tabs: { id: SidebarTab; label: string; icon: React.ReactNode }[] = [
+  { id: "config", label: "Config", icon: <Settings2 className="h-4 w-4" /> },
+  { id: "intel", label: "Intel", icon: <ShieldCheck className="h-4 w-4" /> },
+  { id: "history", label: "History", icon: <History className="h-4 w-4" /> },
+  { id: "schedule", label: "Schedule", icon: <CalendarClock className="h-4 w-4" /> },
+];
+
+function toPanelItems(items: any[], fallbackTitle: string, fallbackSubtitle: string): PanelItem[] {
+  return items.slice(0, 6).map((entry, idx) => {
+    if (typeof entry === "string") {
+      return { title: entry, subtitle: fallbackSubtitle };
+    }
+    const title =
+      entry?.title ||
+      entry?.name ||
+      entry?.query ||
+      entry?.task ||
+      entry?.summary ||
+      entry?.id ||
+      `${fallbackTitle} ${idx + 1}`;
+    const subtitle =
+      entry?.status ||
+      entry?.severity ||
+      entry?.created_at ||
+      entry?.updated_at ||
+      fallbackSubtitle;
+    return { title: String(title), subtitle: String(subtitle) };
+  });
+}
+
+function EmptyBlock({ text }: { text: string }) {
+  return (
+    <div className="glass-panel rounded-2xl border-white/5 px-4 py-5 text-center text-xs text-neutral-500">
+      {text}
+    </div>
+  );
+}
+
+function ListBlock({ items }: { items: PanelItem[] }) {
+  return (
+    <div className="space-y-2">
+      {items.map((item, index) => (
+        <motion.div
+          key={`${item.title}-${index}`}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: index * 0.05, duration: 0.2 }}
+          className="glass-panel rounded-2xl border-white/5 px-4 py-3"
+        >
+          <p className="truncate text-sm font-semibold text-neutral-100">{item.title}</p>
+          <p className="mt-1 truncate text-[11px] uppercase tracking-[0.18em] text-neutral-500">{item.subtitle}</p>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({
+  selectedModel,
+  setSelectedModel,
   onFileUpload,
-  uploadedFiles 
+  uploadedFiles,
+  isListening,
+  onVoiceToggle,
+  isSpeaking,
+  onSpeakToggle,
+  canSpeak,
+  sidebarTab,
+  setSidebarTab,
+  websiteCount,
+  aiMessageCount,
+  toolRuns,
+  competitors,
+  alerts,
+  pastReports,
+  scheduledTasks,
 }) => {
-  const models = [
-    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', icon: <BrainCircuit className="w-4 h-4" /> },
-    { id: 'gemini-2.0-pro-exp', name: 'Gemini 2.0 Pro', icon: <BrainCircuit className="w-4 h-4" /> },
-    { id: 'gpt-4o', name: 'GPT-4o', icon: <BrainCircuit className="w-4 h-4 text-green-500" /> },
-    { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', icon: <BrainCircuit className="w-4 h-4 text-orange-500" /> },
-  ];
+  const intelCards = toPanelItems(
+    [...alerts, ...competitors],
+    "Intel Feed",
+    "Incoming signal",
+  );
+  const historyCards = toPanelItems(pastReports, "Report", "Archived");
+  const scheduleCards = toPanelItems(scheduledTasks, "Task", "Queued");
 
   return (
-    <aside className="w-72 bg-neutral-900/50 backdrop-blur-xl border-r border-neutral-800 flex flex-col h-full">
-      <div className="p-6">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Globe className="w-5 h-5 text-white" />
-          </div>
-          <h1 className="text-xl font-bold bg-gradient-to-r from-white to-neutral-400 bg-clip-text text-transparent">
-            Deep Search
-          </h1>
-        </div>
+    <aside className="relative z-40 flex h-full w-[23rem] shrink-0 flex-col overflow-hidden border-r border-white/5 premium-gradient">
+      <div className="pointer-events-none absolute inset-0 grid-pattern opacity-[0.08]" />
+      <div className="pointer-events-none absolute -left-24 top-0 h-64 w-64 rounded-full bg-cyan-500/10 blur-3xl" />
 
-        <div className="space-y-6">
-          <div>
-            <label className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3 block">
-              AI MODEL
-            </label>
-            <div className="space-y-1">
-              {models.map((model) => (
-                <button
-                  key={model.id}
-                  onClick={() => setSelectedModel(model.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
-                    selectedModel === model.id 
-                      ? 'bg-blue-600/10 text-blue-400 border border-blue-600/20' 
-                      : 'text-neutral-400 hover:bg-neutral-800/50 hover:text-neutral-200'
-                  }`}
-                >
-                  {model.icon}
-                  <span className="text-sm font-medium">{model.name}</span>
-                </button>
-              ))}
+      <div className="relative border-b border-white/5 p-5">
+        <div className="glass-panel neon-glow-emerald rounded-3xl border-white/10 p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 via-indigo-500 to-emerald-500">
+              <Sparkles className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-base font-black uppercase tracking-[0.18em] text-white">Deep Search</h1>
+              <p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-cyan-300/80">Research Command</p>
             </div>
           </div>
-
-          <div>
-            <label className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3 block">
-              KNOWLEDGE BASE (RAG)
-            </label>
-            <div 
-              className="border-2 border-dashed border-neutral-800 rounded-xl p-4 transition-colors hover:border-neutral-700 group cursor-pointer relative"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (e.dataTransfer.files) onFileUpload(e.dataTransfer.files);
-              }}
-            >
-              <input 
-                type="file" 
-                multiple 
-                className="absolute inset-0 opacity-0 cursor-pointer" 
-                onChange={(e) => e.target.files && onFileUpload(e.target.files)}
-              />
-              <div className="flex flex-col items-center justify-center gap-2">
-                <FolderUp className="w-6 h-6 text-neutral-600 group-hover:text-neutral-400 transition-colors" />
-                <p className="text-xs text-neutral-500 group-hover:text-neutral-400 transition-colors text-center">
-                  Drop documents here to chat with them
-                </p>
-              </div>
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-2 py-2">
+              <p className="text-sm font-black text-cyan-300">{websiteCount}</p>
+              <p className="text-[9px] uppercase tracking-[0.2em] text-cyan-200/70">Data</p>
             </div>
-            
-            {uploadedFiles.length > 0 && (
-              <div className="mt-4 space-y-2">
-                {uploadedFiles.map((file, i) => (
-                  <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-neutral-800/50 rounded-md border border-neutral-700/50">
-                    <Database className="w-3 h-3 text-neutral-500" />
-                    <span className="text-xs text-neutral-400 truncate flex-1">{file}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/10 px-2 py-2">
+              <p className="text-sm font-black text-indigo-300">{aiMessageCount}</p>
+              <p className="text-[9px] uppercase tracking-[0.2em] text-indigo-200/70">AI</p>
+            </div>
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-2 py-2">
+              <p className="text-sm font-black text-emerald-300">{toolRuns}</p>
+              <p className="text-[9px] uppercase tracking-[0.2em] text-emerald-200/70">Tools</p>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="mt-auto p-4 border-t border-neutral-800">
-        <button className="w-full flex items-center gap-3 px-3 py-2 text-neutral-400 hover:bg-neutral-800/50 hover:text-neutral-200 rounded-lg transition-all">
-          <History className="w-4 h-4" />
-          <span className="text-sm font-medium">History</span>
-        </button>
-        <button className="w-full flex items-center gap-3 px-3 py-2 text-neutral-400 hover:bg-neutral-800/50 hover:text-neutral-200 rounded-lg transition-all">
-          <Settings className="w-4 h-4" />
-          <span className="text-sm font-medium">Settings</span>
-        </button>
+      <div className="relative border-b border-white/5 px-3 py-3">
+        <div className="grid grid-cols-4 gap-2">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setSidebarTab(tab.id)}
+              className={`relative flex items-center justify-center gap-1 rounded-xl px-2 py-2 text-[10px] font-bold uppercase tracking-[0.1em] transition ${
+                sidebarTab === tab.id
+                  ? "bg-white/10 text-cyan-300"
+                  : "bg-white/0 text-neutral-500 hover:bg-white/5 hover:text-neutral-200"
+              }`}
+            >
+              {tab.icon}
+              <span className="hidden xl:inline">{tab.label}</span>
+              {sidebarTab === tab.id && (
+                <motion.div
+                  layoutId="tab-highlight"
+                  className="absolute inset-0 rounded-xl border border-cyan-500/40"
+                  transition={{ type: "spring", stiffness: 260, damping: 22 }}
+                />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="relative flex-1 overflow-y-auto px-4 py-4 scrollbar-hide">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={sidebarTab}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-4"
+          >
+            {sidebarTab === "config" && (
+              <>
+                <section className="glass-panel rounded-2xl border-white/5 p-4">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-neutral-500">Model Stack</p>
+                  <div className="space-y-2">
+                    {models.map((model) => (
+                      <button
+                        key={model.id}
+                        onClick={() => setSelectedModel(model.id)}
+                        className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition ${
+                          selectedModel === model.id
+                            ? "border-indigo-500/60 bg-indigo-500/15 text-indigo-100"
+                            : "border-white/5 bg-black/30 text-neutral-300 hover:border-white/15"
+                        }`}
+                      >
+                        <BrainCircuit className="h-4 w-4 shrink-0 text-indigo-300" />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold">{model.name}</p>
+                          <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">{model.hint}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="glass-panel rounded-2xl border-white/5 p-4">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-neutral-500">RAG Ingestion</p>
+                  <label
+                    className="relative flex cursor-pointer flex-col items-center gap-2 rounded-2xl border border-dashed border-cyan-500/30 bg-cyan-500/5 px-4 py-6 text-center transition hover:border-cyan-400/60 hover:bg-cyan-500/10"
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      if (event.dataTransfer.files) onFileUpload(event.dataTransfer.files);
+                    }}
+                  >
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.docx,.txt,.md,.json"
+                      className="absolute inset-0 cursor-pointer opacity-0"
+                      onChange={(event) => event.target.files && onFileUpload(event.target.files)}
+                    />
+                    <FolderUp className="h-6 w-6 text-cyan-300" />
+                    <p className="text-xs font-semibold text-cyan-100">Upload research docs and internal notes</p>
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-200/70">PDF, DOCX, TXT, MD, JSON</p>
+                  </label>
+                  {uploadedFiles.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {uploadedFiles.slice(-5).map((file, index) => (
+                        <div
+                          key={`${file}-${index}`}
+                          className="flex items-center gap-2 rounded-xl border border-white/5 bg-black/30 px-3 py-2"
+                        >
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
+                          <span className="truncate text-xs text-neutral-300">{file}</span>
+                          <CheckCircle2 className="ml-auto h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <section className="glass-panel rounded-2xl border-white/5 p-4">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-neutral-500">Voice Controls</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <motion.button
+                      whileTap={{ scale: 0.96 }}
+                      onClick={onVoiceToggle}
+                      className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-xs font-semibold transition ${
+                        isListening
+                          ? "border-cyan-400/60 bg-cyan-500/20 text-cyan-100"
+                          : "border-white/10 bg-black/30 text-neutral-300 hover:border-cyan-500/40"
+                      }`}
+                    >
+                      {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                      {isListening ? "Stop Mic" : "Start Mic"}
+                    </motion.button>
+                    <motion.button
+                      whileTap={{ scale: 0.96 }}
+                      onClick={onSpeakToggle}
+                      disabled={!canSpeak}
+                      className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-xs font-semibold transition ${
+                        isSpeaking
+                          ? "border-indigo-400/60 bg-indigo-500/20 text-indigo-100"
+                          : "border-white/10 bg-black/30 text-neutral-300 hover:border-indigo-500/40"
+                      } disabled:cursor-not-allowed disabled:opacity-40`}
+                    >
+                      {isSpeaking ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                      {isSpeaking ? "Stop Voice" : "Read Report"}
+                    </motion.button>
+                  </div>
+                </section>
+
+                <section className="glass-panel rounded-2xl border-white/5 p-4">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-neutral-500">Tool Fabric</p>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-cyan-100">
+                        <RadioTower className="h-4 w-4" />
+                        google_search
+                      </div>
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-cyan-200/70">
+                        {websiteCount > 0 ? "Live" : "Standby"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-2">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-indigo-100">
+                        <BrainCircuit className="h-4 w-4" />
+                        mcp
+                      </div>
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-indigo-200/70">
+                        {toolRuns > 0 ? "Connected" : "Idle"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-emerald-100">
+                        <Database className="h-4 w-4" />
+                        rag
+                      </div>
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-emerald-200/70">
+                        {uploadedFiles.length > 0 ? "Indexed" : "Waiting"}
+                      </span>
+                    </div>
+                  </div>
+                </section>
+              </>
+            )}
+
+            {sidebarTab === "intel" && (
+              <>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-500">Signals & Alerts</p>
+                {intelCards.length ? <ListBlock items={intelCards} /> : <EmptyBlock text="No live intel yet. Start a research run to populate this channel." />}
+              </>
+            )}
+
+            {sidebarTab === "history" && (
+              <>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-500">Report Archive</p>
+                {historyCards.length ? <ListBlock items={historyCards} /> : <EmptyBlock text="No reports archived yet." />}
+              </>
+            )}
+
+            {sidebarTab === "schedule" && (
+              <>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-500">Automation Queue</p>
+                {scheduleCards.length ? <ListBlock items={scheduleCards} /> : <EmptyBlock text="No scheduled tasks available." />}
+              </>
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </aside>
   );
