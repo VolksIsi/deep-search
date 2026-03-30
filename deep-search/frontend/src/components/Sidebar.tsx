@@ -50,8 +50,8 @@ interface PanelItem {
 }
 
 const models = [
-  { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", hint: "Speed Layer" },
-  { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", hint: "Reasoning Layer" },
+  { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro", hint: "Reasoning Layer (SOTA)" },
+  { id: "gemini-3.1-flash-lite", name: "Gemini 3.1 Flash-Lite", hint: "Speed Layer (SOTA)" },
   { id: "gpt-4o", name: "GPT-4o", hint: "Omni Layer" },
   { id: "claude-3-5-sonnet", name: "Claude 3.5 Sonnet", hint: "Writing Layer" },
 ];

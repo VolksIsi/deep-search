@@ -26,8 +26,8 @@ load_dotenv()
 # To use Vertex AI instead, set GOOGLE_GENAI_USE_VERTEXAI=TRUE in your .env
 # and ensure you have Google Cloud credentials configured.
 
-# Ensure models are looked up in a valid regional location, default to us-central1
-os.environ["GOOGLE_CLOUD_LOCATION"] = os.getenv("GCP_REGION", "us-central1")
+# FORCE GLOBAL LOCATION for access to the newest SOTA releases (Gemini 3.1 series)
+os.environ["GOOGLE_CLOUD_LOCATION"] = "global"
 
 if os.getenv("GOOGLE_API_KEY"):
     # AI Studio mode (default): Use API key authentication
@@ -64,8 +64,8 @@ class ResearchConfiguration:
         gcp_region (str): Google Cloud region for deployment.
     """
 
-    critic_model: str = os.getenv("CRITIC_MODEL", "gemini-2.5-flash")
-    worker_model: str = os.getenv("WORKER_MODEL", "gemini-2.5-flash")
+    critic_model: str = os.getenv("CRITIC_MODEL", "gemini-3.1-pro")
+    worker_model: str = os.getenv("WORKER_MODEL", "gemini-3.1-pro")
     max_search_iterations: int = int(os.getenv("MAX_SEARCH_ITERATIONS", "5"))
     max_parallel_workers: int = int(os.getenv("MAX_PARALLEL_WORKERS", "3"))
     data_dir: Path = Path(os.getenv("DATA_DIR", "./data"))
