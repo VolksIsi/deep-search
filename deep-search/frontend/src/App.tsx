@@ -298,6 +298,18 @@ export default function App() {
       } else {
         for (const text of textParts) {
           accumulatedTextRef.current += text;
+          
+          // Intelligent Keyword Detection for Research Plan Approval Buttons
+          const lowerText = accumulatedTextRef.current.toLowerCase();
+          if (
+            (lowerText.includes("approve this plan") || 
+             lowerText.includes("refine it further") || 
+             lowerText.includes("do you approve")) && 
+            !hasResearchPlan
+          ) {
+            setHasResearchPlan(true);
+          }
+
           setMessages((prev) =>
             prev.map((message) =>
               message.id === aiMsgId
