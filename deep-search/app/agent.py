@@ -137,7 +137,16 @@ def collect_research_sources_callback(
                         )
     callback_context.state["url_to_short_id"] = url_to_short_id
 
+import time
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
+
 # --- New Tools ---
+@retry(
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    stop=stop_after_attempt(3),
+    retry=retry_if_exception_type(Exception), # Catch generic and resource exhausted
+    reraise=True
+)
 def vertex_ai_search(query: str) -> str:
     """Searches the web using Vertex AI Discovery Engine (Grounded Generation API).
     
@@ -185,12 +194,16 @@ def vertex_ai_search(query: str) -> str:
         try:
             response = client.search(request)
         except Exception as e:
-            if "404" in str(e) or "NOT_FOUND" in str(e):
+            err_str = str(e).lower()
+            if "404" in err_str or "not_found" in err_str:
                 # Fallback to us-central1 if global fails
                 location = "us-central1"
                 serving_config = f"projects/{actual_project_id}/locations/{location}/collections/default_collection/engines/{engine_id}/servingConfigs/default_config"
                 request.serving_config = serving_config
                 response = client.search(request)
+            elif "429" in err_str or "exhausted" in err_str:
+                # Let tenacity handle retries for 429
+                raise e
             else:
                 raise e
         
@@ -208,6 +221,10 @@ def vertex_ai_search(query: str) -> str:
         
         return "\n".join(output)
     except Exception as e:
+        if "429" in str(e) or "exhausted" in str(e):
+             # Log and re-raise for tenacity
+             print(f"Rate limit hit for query '{query}'. Retrying...")
+             raise e
         return f"Vertex AI Search error: {str(e)}"
 
 def web_scrape(url: str) -> str:
