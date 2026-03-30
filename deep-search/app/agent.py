@@ -148,7 +148,7 @@ from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_excep
     reraise=True
 )
 def vertex_ai_search(query: str) -> str:
-    """Searches the web using Vertex AI Grounded Generation with Google Search.
+    """Searches the web using Vertex AI Discovery Engine (Search API).
 
     Args:
         query (str): The search query to execute.
@@ -156,7 +156,7 @@ def vertex_ai_search(query: str) -> str:
     try:
         import os
         import google.auth
-        from google.cloud import discoveryengine_v1alpha as discoveryengine
+        from google.cloud import discoveryengine_v1 as discoveryengine
 
         credentials, project_id = google.auth.default()
         actual_project_id = config.gcp_project_id or project_id or os.environ.get("GOOGLE_CLOUD_PROJECT")
@@ -164,52 +164,47 @@ def vertex_ai_search(query: str) -> str:
         if not actual_project_id:
             return "Error: Could not determine Google Cloud Project ID for Vertex AI Search."
 
-        client_options = {"api_endpoint": "discoveryengine.googleapis.com"}
-        client = discoveryengine.GroundedGenerationServiceClient(
-            credentials=credentials,
-            client_options=client_options
-        )
+        location = "global"
+        engine_id = "deep-search-engine"
 
-        request = discoveryengine.GenerateGroundedContentRequest(
-            location=f"projects/{actual_project_id}/locations/global",
-            contents=[
-                discoveryengine.GroundedGenerationContent(
-                    role="user",
-                    parts=[discoveryengine.GroundedGenerationContent.Part(text=query)]
-                )
-            ],
-            system_instruction=discoveryengine.GroundedGenerationContent(
-                parts=[discoveryengine.GroundedGenerationContent.Part(
-                    text="You are a research assistant. Search the web and provide a comprehensive, factual answer with sources."
-                )]
-            ),
-            generation_spec=discoveryengine.GenerateGroundedContentRequest.GenerationSpec(
-                model_id="gemini-2.5-flash",
-            ),
-            grounding_spec=discoveryengine.GenerateGroundedContentRequest.GroundingSpec(
-                grounding_sources=[
-                    discoveryengine.GenerateGroundedContentRequest.GroundingSpec.GroundingSource(
-                        google_search_source=discoveryengine.GenerateGroundedContentRequest.GroundingSpec.GroundingSource.GoogleSearchSource()
+        # Force global endpoint for Discovery Engine
+        client_options = {"api_endpoint": "global-discoveryengine.googleapis.com"}
+        client = discoveryengine.SearchServiceClient(credentials=credentials, client_options=client_options)
+
+        serving_config = f"projects/{actual_project_id}/locations/{location}/collections/default_collection/engines/{engine_id}/servingConfigs/default_config"
+
+        request = discoveryengine.SearchRequest(
+            serving_config=serving_config,
+            query=query,
+            page_size=10,
+            content_search_spec=discoveryengine.SearchRequest.ContentSearchSpec(
+                summary_spec=discoveryengine.SearchRequest.ContentSearchSpec.SummarySpec(
+                    summary_result_count=5,
+                    include_citations=True,
+                    ignore_adversarial_query=True,
+                    model_spec=discoveryengine.SearchRequest.ContentSearchSpec.SummarySpec.ModelSpec(
+                        version="stable"
                     )
-                ]
-            ),
+                ),
+                extractive_content_spec=discoveryengine.SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
+                    max_extractive_answer_count=3
+                )
+            )
         )
 
-        response = client.generate_grounded_content(request)
+        response = client.search(request)
 
-        candidate = response.candidates[0] if response.candidates else None
-        if not candidate:
-            return "No results found."
+        output = [f"Vertex AI Summary:\n{response.summary.summary_text}\n"]
 
-        answer_text = "".join(part.text for part in candidate.content.parts if hasattr(part, "text"))
-
-        output = [f"Web Search Results:\n{answer_text}\n"]
-
-        if hasattr(candidate, "grounding_metadata") and candidate.grounding_metadata:
-            output.append("Sources:")
-            for chunk in candidate.grounding_metadata.grounding_chunks:
-                if hasattr(chunk, "web") and chunk.web:
-                    output.append(f"- {chunk.web.title}: {chunk.web.uri}")
+        output.append("Top Results Data:")
+        for result in response.results:
+            doc = result.document
+            if doc.derived_struct_data:
+                title = doc.derived_struct_data.get("title", "")
+                link = doc.derived_struct_data.get("link", "")
+                snippets = doc.derived_struct_data.get("snippets", [])
+                snippet_text = snippets[0].get("snippet", "") if snippets else ""
+                output.append(f"- {title} ({link}): {snippet_text}")
 
         return "\n".join(output)
     except Exception as e:
