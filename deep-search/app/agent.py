@@ -167,9 +167,15 @@ def vertex_ai_search(query: str) -> str:
         location = "global"
         engine_id = "deep-search-engine"
         
-        # Force global endpoint to avoid "us-central1" region mismatch errors
-        client_options = {"api_endpoint": "discoveryengine.googleapis.com"}
+        # ABSOLUTELY FORCE GLOBAL ENDPOINT - This is required for Search Engines created as 'global'
+        # The documentation states: discoveryengine.googleapis.com for global, but 
+        # specifically for some projects 'global-discoveryengine.googleapis.com' helps.
+        client_options = {"api_endpoint": "global-discoveryengine.googleapis.com"}
         client = discoveryengine.SearchServiceClient(credentials=credentials, client_options=client_options)
+        
+        # Re-derive project ID to be sure
+        actual_project_id = config.gcp_project_id or project_id or os.environ.get("GOOGLE_CLOUD_PROJECT")
+        
         serving_config = f"projects/{actual_project_id}/locations/{location}/collections/default_collection/engines/{engine_id}/servingConfigs/default_config"
         
         request = discoveryengine.SearchRequest(
@@ -191,21 +197,8 @@ def vertex_ai_search(query: str) -> str:
             )
         )
 
-        try:
-            response = client.search(request)
-        except Exception as e:
-            err_str = str(e).lower()
-            if "404" in err_str or "not_found" in err_str:
-                # Fallback to us-central1 if global fails
-                location = "us-central1"
-                serving_config = f"projects/{actual_project_id}/locations/{location}/collections/default_collection/engines/{engine_id}/servingConfigs/default_config"
-                request.serving_config = serving_config
-                response = client.search(request)
-            elif "429" in err_str or "exhausted" in err_str:
-                # Let tenacity handle retries for 429
-                raise e
-            else:
-                raise e
+        # No fallback to us-central1 here, we must use GLOBAL for this engine
+        response = client.search(request)
         
         output = [f"Vertex AI Summary:\n{response.summary.summary_text}\n"]
         
@@ -215,14 +208,14 @@ def vertex_ai_search(query: str) -> str:
             if doc.derived_struct_data:
                 title = doc.derived_struct_data.get("title", "")
                 link = doc.derived_struct_data.get("link", "")
-                snippets = doc.derived_struct_data.get("snippets", [])
-                snippet_text = snippets[0].get("snippet", "") if snippets else ""
+                suffixes = doc.derived_struct_data.get("snippets", [])
+                snippet_text = suffixes[0].get("snippet", "") if suffixes else ""
                 output.append(f"- {title} ({link}): {snippet_text}")
         
         return "\n".join(output)
     except Exception as e:
-        if "429" in str(e) or "exhausted" in str(e):
-             # Log and re-raise for tenacity
+        err_str = str(e).lower()
+        if "429" in err_str or "exhausted" in err_str:
              print(f"Rate limit hit for query '{query}'. Retrying...")
              raise e
         return f"Vertex AI Search error: {str(e)}"
