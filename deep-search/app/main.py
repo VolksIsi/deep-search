@@ -8,6 +8,10 @@ from google.adk.cli.fast_api import get_fast_api_app
 
 from app.api_routes import router as custom_api_router
 
+from app.config import config
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("allmighty")
@@ -23,6 +27,20 @@ app = get_fast_api_app(
     allow_origins=["*"],
     web=True,
 )
+
+# Auth Middleware: Protect critical /api routes
+@app.middleware("http")
+async def security_barrier(request: Request, call_next):
+    # Only protect API and RPC routes
+    if request.url.path.startswith("/api") or request.url.path.startswith("/rpc"):
+        token = request.headers.get("X-Access-Token")
+        if token != config.access_token:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Access Denied: Please provide a valid 2026-Style access token."}
+            )
+    response = await call_next(request)
+    return response
 
 # Mount our platform's custom API routes under /api
 app.include_router(custom_api_router)

@@ -116,7 +116,12 @@ export default function App() {
   const [websiteCount, setWebsiteCount] = useState(0);
   const [isCheckingBackend, setIsCheckingBackend] = useState(true);
 
-  const [selectedModel, setSelectedModel] = useState("gemini-2.5-flash");
+  // --- Auth State ---
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [accessToken, setAccessToken] = useState<string>("");
+  const [loginError, setLoginError] = useState(false);
+
+  const [selectedModel, setSelectedModel] = useState("gemini-2.0-flash");
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("config");
   const [competitors, setCompetitors] = useState<any[]>([]);
@@ -132,14 +137,36 @@ export default function App() {
   const { isListening, transcript, setTranscript, startListening, stopListening } = useVoiceInput();
   const { isSpeaking, speak, stop: stopSpeaking } = useSpeechOutput();
 
+  // Check localStorage on mount
   useEffect(() => {
+    const savedToken = localStorage.getItem("deep_search_token");
+    if (savedToken) {
+      setAccessToken(savedToken);
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (accessToken) {
+      localStorage.setItem("deep_search_token", accessToken);
+      setIsAuthenticated(true);
+    } else {
+      setLoginError(true);
+    }
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
     const loadData = async () => {
       try {
+        const headers = { "X-Access-Token": accessToken };
         const [reportsRes, alertsRes, tasksRes, compRes] = await Promise.allSettled([
-          fetch("/api/memory/reports").then((res) => res.json()),
-          fetch("/api/intel/alerts").then((res) => res.json()),
-          fetch("/api/scheduler/tasks").then((res) => res.json()),
-          fetch("/api/intel/dashboard").then((res) => res.json()),
+          fetch("/api/memory/reports", { headers }).then((res) => res.json()),
+          fetch("/api/intel/alerts", { headers }).then((res) => res.json()),
+          fetch("/api/scheduler/tasks", { headers }).then((res) => res.json()),
+          fetch("/api/intel/dashboard", { headers }).then((res) => res.json()),
         ]);
         if (reportsRes.status === "fulfilled") setPastReports(reportsRes.value.reports || []);
         if (alertsRes.status === "fulfilled") setAlerts(alertsRes.value.alerts || []);
@@ -174,7 +201,10 @@ export default function App() {
     const id = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const res = await fetch(`/apps/app/users/u_999/sessions/${id}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "X-Access-Token": accessToken
+      },
     });
     if (!res.ok) throw new Error(`Session failed: ${res.status}`);
     const data = await res.json();
@@ -332,7 +362,10 @@ export default function App() {
         const response = await retryWithBackoff(() =>
           fetch("/run_sse", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { 
+              "Content-Type": "application/json",
+              "X-Access-Token": accessToken
+            },
             body: JSON.stringify({
               appName: localAppName,
               userId: localUserId,
@@ -521,6 +554,70 @@ export default function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#05060a] text-neutral-100">
+      <AnimatePresence>
+        {!isAuthenticated && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-xl"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="glass-panel w-full max-w-md rounded-3xl border-white/10 p-10 text-center shadow-2xl"
+            >
+              <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full border border-cyan-500/30 bg-cyan-500/10 shadow-[0_0_30px_rgba(34,211,238,0.2)]">
+                <Shield className="h-10 w-10 text-cyan-400" />
+              </div>
+              
+              <h1 className="mb-2 text-2xl font-black uppercase tracking-widest text-white">
+                ALLMIGHTY ACCESS
+              </h1>
+              <p className="mb-8 text-neutral-400 text-sm">
+                Unlock the 2026 Deep Search Engine with your secure access token.
+              </p>
+
+              <form onSubmit={handleLogin} className="space-y-6">
+                <div className="relative group">
+                  <div className={`absolute inset-0 bg-cyan-500/20 blur-xl rounded-2xl transition-opacity duration-500 ${accessToken ? 'opacity-100' : 'opacity-0'}`} />
+                  <input
+                    type="password"
+                    value={accessToken}
+                    onChange={(e) => {
+                      setAccessToken(e.target.value);
+                      setLoginError(false);
+                    }}
+                    placeholder="Enter Access Token..."
+                    className={`relative w-full rounded-2xl border ${loginError ? 'border-red-500/50' : 'border-white/10'} bg-black/40 px-6 py-4 text-center text-lg tracking-widest text-white placeholder:text-neutral-700 focus:border-cyan-500/50 focus:outline-none transition-all`}
+                    autoFocus
+                  />
+                </div>
+
+                {loginError && (
+                  <p className="text-red-400 text-xs font-bold uppercase tracking-tighter">
+                    INVALID TOKEN • ACCESS DENIED
+                  </p>
+                )}
+
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  type="submit"
+                  className="w-full rounded-2xl bg-cyan-500 py-4 font-black uppercase tracking-[0.2em] text-black shadow-[0_0_25px_rgba(34,211,238,0.4)] transition-all hover:bg-cyan-400"
+                >
+                  Authorize System
+                </motion.button>
+              </form>
+
+              <div className="mt-8 text-[10px] uppercase tracking-[0.3em] text-neutral-500">
+                Security Protocol V4.2 • Protected by Neural Grid
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <Sidebar
         selectedModel={selectedModel}
         setSelectedModel={setSelectedModel}

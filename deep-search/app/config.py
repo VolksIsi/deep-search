@@ -64,8 +64,8 @@ class ResearchConfiguration:
         gcp_region (str): Google Cloud region for deployment.
     """
 
-    critic_model: str = os.getenv("CRITIC_MODEL", "gemini-2.5-flash")
-    worker_model: str = os.getenv("WORKER_MODEL", "gemini-2.5-flash")
+    critic_model: str = os.getenv("CRITIC_MODEL", "gemini-2.0-flash")
+    worker_model: str = os.getenv("WORKER_MODEL", "gemini-2.0-flash")
     max_search_iterations: int = int(os.getenv("MAX_SEARCH_ITERATIONS", "5"))
     max_parallel_workers: int = int(os.getenv("MAX_PARALLEL_WORKERS", "3"))
     data_dir: Path = Path(os.getenv("DATA_DIR", "./data"))
@@ -74,6 +74,7 @@ class ResearchConfiguration:
     enable_competitive_intel: bool = os.getenv("ENABLE_COMPETITIVE_INTEL", "false").lower() == "true"
     gcp_project_id: str = os.getenv("GCP_PROJECT_ID", "")
     gcp_region: str = os.getenv("GCP_REGION", "us-central1")
+    access_token: str = os.getenv("ACCESS_TOKEN", "DeepSearch2026!")
 
     def __post_init__(self) -> None:
         mcp_env = os.getenv("MCP_SERVERS", "")
