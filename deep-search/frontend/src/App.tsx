@@ -129,6 +129,7 @@ export default function App() {
   const [pastReports, setPastReports] = useState<any[]>([]);
   const [scheduledTasks, setScheduledTasks] = useState<any[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [hasResearchPlan, setHasResearchPlan] = useState(false);
 
   const currentAgentRef = useRef("");
   const accumulatedTextRef = useRef("");
@@ -304,8 +305,7 @@ export default function App() {
           if (
             (lowerText.includes("approve this plan") || 
              lowerText.includes("refine it further") || 
-             lowerText.includes("do you approve")) && 
-            !hasResearchPlan
+             lowerText.includes("do you approve"))
           ) {
             setHasResearchPlan(true);
           }
