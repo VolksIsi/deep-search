@@ -155,11 +155,12 @@ def vertex_ai_search(query: str) -> str:
         if not actual_project_id:
             return "Error: Could not determine Google Cloud Project ID for Vertex AI Search."
 
-        # Support both global and regional engines based on config
         location = "global"
         engine_id = "deep-search-engine"
         
-        client = discoveryengine.SearchServiceClient(credentials=credentials)
+        # Force global endpoint to avoid "us-central1" region mismatch errors
+        client_options = {"api_endpoint": "discoveryengine.googleapis.com"}
+        client = discoveryengine.SearchServiceClient(credentials=credentials, client_options=client_options)
         serving_config = f"projects/{actual_project_id}/locations/{location}/collections/default_collection/engines/{engine_id}/servingConfigs/default_config"
         
         request = discoveryengine.SearchRequest(
