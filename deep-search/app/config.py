@@ -26,8 +26,8 @@ load_dotenv()
 # To use Vertex AI instead, set GOOGLE_GENAI_USE_VERTEXAI=TRUE in your .env
 # and ensure you have Google Cloud credentials configured.
 
-# Hard assignment for Vertex AI global endpoint to avoid 404s in Cloud Run
-os.environ["GOOGLE_CLOUD_LOCATION"] = "global"
+# Ensure models are looked up in a valid regional location, default to us-central1
+os.environ["GOOGLE_CLOUD_LOCATION"] = os.getenv("GCP_REGION", "us-central1")
 
 if os.getenv("GOOGLE_API_KEY"):
     # AI Studio mode (default): Use API key authentication
