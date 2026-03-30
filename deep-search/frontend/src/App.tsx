@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   BarChart3,
   Brain,
+  CheckCircle2,
   Command,
   Cpu,
   Download,
@@ -13,6 +14,7 @@ import {
   MicOff,
   Play,
   Send,
+  Settings2,
   Shield,
   Sparkle,
   Sparkles,
@@ -121,6 +123,7 @@ export default function App() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [pastReports, setPastReports] = useState<any[]>([]);
   const [scheduledTasks, setScheduledTasks] = useState<any[]>([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const currentAgentRef = useRef("");
   const accumulatedTextRef = useRef("");
@@ -485,12 +488,36 @@ export default function App() {
           <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl border border-cyan-500/30 bg-cyan-500/10">
             <Loader2 className="h-8 w-8 animate-spin text-cyan-300" />
           </div>
-          <p className="text-lg font-black uppercase tracking-[0.12em] text-white">Booting Research Platform</p>
-          <p className="mt-2 text-sm text-neutral-400">Connecting to runtime, tools, and memory nodes.</p>
+          <p className="text-lg font-black uppercase tracking-[0.12em] text-white">Allmighty Deep Search</p>
+          <p className="mt-2 text-sm text-neutral-400">Booting neural research platform... Connecting to Discovery Engine.</p>
         </motion.div>
       </div>
     );
   }
+
+  const handleReportSelect = async (reportId: number) => {
+    try {
+      setIsLoading(true);
+      const res = await fetch(`/api/memory/reports/${reportId}`);
+      if (!res.ok) throw new Error("Report not found");
+      const report = await res.json();
+      
+      setMessages([
+        {
+          type: "ai",
+          content: report.content,
+          id: `restored_${report.id}`,
+          agent: "library_restoration",
+          finalReportWithCitations: true,
+        }
+      ]);
+      setIsSidebarOpen(false);
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Failed to load report:", error);
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#05060a] text-neutral-100">
@@ -512,7 +539,10 @@ export default function App() {
         competitors={competitors}
         alerts={alerts}
         pastReports={pastReports}
+        onReportSelect={handleReportSelect}
         scheduledTasks={scheduledTasks}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
       />
 
       <main className="relative flex flex-1 flex-col overflow-hidden premium-gradient">
@@ -537,6 +567,7 @@ export default function App() {
                 transcript={transcript}
                 onVoiceToggle={isListening ? stopListening : startListening}
                 selectedModel={selectedModel}
+                onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
               />
             </motion.section>
           ) : (
@@ -559,14 +590,15 @@ export default function App() {
                 onExportDocx={handleExportDocx}
                 isSpeaking={isSpeaking}
                 onSpeak={() => {
-                  const report = messages.find((message) => message.finalReportWithCitations);
-                  if (report) speak(report.content);
+                  const r = messages.find((m) => m.finalReportWithCitations);
+                  if (r) speak(r.content);
                 }}
                 onStopSpeak={stopSpeaking}
                 onSubmit={handleSubmit}
                 isListening={isListening}
                 onVoiceToggle={isListening ? stopListening : startListening}
                 transcript={transcript}
+                onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
               />
             </motion.section>
           )}
@@ -582,6 +614,7 @@ function WelcomeView({
   transcript,
   onVoiceToggle,
   selectedModel,
+  onToggleSidebar,
 }: {
   onSubmit: (query: string) => void;
   isLoading: boolean;
@@ -589,6 +622,7 @@ function WelcomeView({
   transcript: string;
   onVoiceToggle: () => void;
   selectedModel: string;
+  onToggleSidebar: () => void;
 }) {
   const [query, setQuery] = useState(transcript || "");
 
@@ -604,27 +638,47 @@ function WelcomeView({
   ];
 
   return (
-    <div className="relative z-10 flex flex-1 flex-col items-center justify-center overflow-hidden px-10 py-10">
+    <div className="relative z-10 flex flex-1 flex-col items-center overflow-y-auto px-6 py-20 lg:justify-center lg:px-10 lg:py-10">
       <div className="pointer-events-none absolute inset-0 grid-pattern opacity-[0.09]" />
-      <div className="w-full max-w-6xl space-y-10 text-center">
+      
+      {/* Header / Brand */}
+      <div className="fixed left-0 right-0 top-0 z-[60] flex h-16 items-center justify-between border-b border-white/5 bg-black/40 px-6 backdrop-blur-xl">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-indigo-600">
+            <Zap className="h-5 w-5 text-black" />
+          </div>
+          <span className="text-sm font-black uppercase tracking-[0.2em] text-white">Allmighty Deep Search</span>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={onToggleSidebar}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-black/60 text-neutral-400 transition hover:text-white"
+          >
+            <Settings2 className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="w-full max-w-6xl space-y-10 py-10 text-center">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
           <div className="inline-flex items-center gap-3 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-4 py-2">
             <Sparkle className="h-4 w-4 text-cyan-300" />
             <span className="text-[11px] font-black uppercase tracking-[0.26em] text-cyan-200/80">
-              Deep-Search Neural Command
+              Vertex AI Neural Core Active
             </span>
           </div>
           <h1 className="mt-7 text-6xl font-black leading-[0.92] tracking-tight text-white md:text-8xl">
-            Execute
+            Next-Gen
             <span className="bg-gradient-to-r from-cyan-300 via-indigo-300 to-emerald-300 bg-clip-text text-transparent">
               {" "}
-              Grade-A
+              AI Search
             </span>
             <br />
-            Research
+            Engine
           </h1>
           <p className="mx-auto mt-5 max-w-3xl text-xl text-neutral-400">
-            Orchestrate search, MCP, and RAG in one premium dark workspace with real-time agent control.
+            Orchestrate grounded research with Vertex AI Discovery Engine and GenAI App Builder.
           </p>
         </motion.div>
 
@@ -730,6 +784,7 @@ function ResearchView({
   isListening,
   onVoiceToggle,
   transcript,
+  onToggleSidebar,
 }: {
   messages: Message[];
   isLoading: boolean;
@@ -746,6 +801,7 @@ function ResearchView({
   isListening: boolean;
   onVoiceToggle: () => void;
   transcript: string;
+  onToggleSidebar: () => void;
 }) {
   const [query, setQuery] = useState("");
 
@@ -782,28 +838,60 @@ function ResearchView({
               <div className="mt-1 flex items-center gap-2">
                 <span className={`h-2 w-2 rounded-full ${isLoading ? "bg-cyan-400 animate-pulse" : "bg-emerald-400"}`} />
                 <p className="text-xs uppercase tracking-[0.14em] text-neutral-400">
-                  {isLoading ? "Pipeline active" : "Pipeline stable"} ? {websiteCount} sources
+                  {isLoading ? "Pipeline active" : "Pipeline stable"} • {websiteCount} sources
                 </p>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={onToggleSidebar}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-black/35 text-neutral-400 transition hover:text-white lg:hidden"
+            >
+              <Settings2 className="h-5 w-5" />
+            </button>
             {hasReport && (
-              <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-black/35 p-1">
-                <button onClick={onExportPDF} className="rounded-lg p-2 text-rose-300 transition hover:bg-white/10">
-                  <Download className="h-4 w-4" />
-                </button>
-                <button onClick={onExportDocx} className="rounded-lg p-2 text-cyan-300 transition hover:bg-white/10">
-                  <Download className="h-4 w-4" />
-                </button>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-black/35 p-1">
+                  <button 
+                    onClick={onExportPDF} 
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-rose-300 transition hover:bg-rose-500/10"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    PDF
+                  </button>
+                  <div className="h-4 w-[1px] bg-white/5" />
+                  <button 
+                    onClick={onExportDocx} 
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-300 transition hover:bg-cyan-500/10"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    DOCX
+                  </button>
+                  <div className="h-4 w-[1px] bg-white/5" />
+                  <button 
+                    onClick={() => {
+                      const report = messages.find(m => m.finalReportWithCitations);
+                      if (report) {
+                        navigator.clipboard.writeText(report.content);
+                        alert("Report copied to clipboard!");
+                      }
+                    }} 
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-emerald-300 transition hover:bg-emerald-500/10"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Copy
+                  </button>
+                </div>
+
                 <button
                   onClick={isSpeaking ? onStopSpeak : onSpeak}
-                  className={`rounded-lg p-2 transition ${
-                    isSpeaking ? "bg-indigo-500/30 text-indigo-100" : "text-indigo-200 hover:bg-white/10"
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 transition ${
+                    isSpeaking ? "bg-indigo-500/30 text-indigo-100" : "bg-black/35 text-indigo-200 hover:bg-white/10"
                   }`}
                 >
-                  {isSpeaking ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                  {isSpeaking ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
                 </button>
               </div>
             )}
@@ -885,21 +973,37 @@ function ResearchView({
           <AnimatePresence>
             {hasResearchPlan && (
               <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                initial={{ opacity: 0, y: 15, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 8, scale: 0.98 }}
-                transition={{ duration: 0.22 }}
-                className="flex justify-center"
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                className="flex items-center justify-center gap-4 py-2"
               >
                 <motion.button
-                  whileHover={{ scale: 1.02, boxShadow: "0 0 42px rgba(16,185,129,0.35)" }}
-                  whileTap={{ scale: 0.98 }}
+                  whileHover={{ scale: 1.05, boxShadow: "0 0 30px rgba(16,185,129,0.4)" }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={() => onSubmit("Start Research")}
                   disabled={isLoading}
-                  className="neon-glow-emerald inline-flex items-center gap-3 rounded-2xl border border-emerald-400/50 bg-emerald-500/85 px-10 py-4 text-sm font-black uppercase tracking-[0.22em] text-white transition disabled:cursor-not-allowed disabled:opacity-60"
+                  className="group relative inline-flex items-center gap-3 overflow-hidden rounded-2xl bg-emerald-500 px-8 py-4 text-xs font-black uppercase tracking-[0.25em] text-black transition-all hover:bg-emerald-400 disabled:opacity-50"
                 >
-                  <Play className="h-5 w-5 fill-white" />
-                  EXECUTE STRATEGY
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
+                  <Play className="h-4 w-4 fill-black" />
+                  Initialize Research
+                </motion.button>
+
+                <motion.button
+                  whileHover={{ scale: 1.05, borderColor: "rgba(255,255,255,0.2)", backgroundColor: "rgba(255,255,255,0.05)" }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => {
+                    setQuery("Optimize the research plan by focus on ");
+                    const input = document.querySelector('input[placeholder*="Approve"]');
+                    if (input instanceof HTMLInputElement) input.focus();
+                  }}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-8 py-4 text-xs font-black uppercase tracking-[0.25em] text-white transition-all backdrop-blur-md"
+                >
+                  <Sparkles className="h-4 w-4 text-cyan-300" />
+                  Refine Strategy
                 </motion.button>
               </motion.div>
             )}

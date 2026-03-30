@@ -31,6 +31,8 @@ dependencies = [
     "plotly>=5.18.0",
     "fastapi>=0.110.0",
     "python-multipart>=0.0.9",
+    "google-cloud-discoveryengine>=0.11.0",
+    "google-auth>=2.0.0",
 ]
 
 [dependency-groups]

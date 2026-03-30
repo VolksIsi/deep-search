@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
-export type SidebarTab = "config" | "intel" | "history" | "schedule";
+export type SidebarTab = "config" | "intel" | "library" | "schedule";
 
 interface SidebarProps {
   selectedModel: string;
@@ -38,7 +38,10 @@ interface SidebarProps {
   competitors: any[];
   alerts: any[];
   pastReports: any[];
+  onReportSelect: (id: number) => void;
   scheduledTasks: any[];
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 interface PanelItem {
@@ -56,7 +59,7 @@ const models = [
 const tabs: { id: SidebarTab; label: string; icon: React.ReactNode }[] = [
   { id: "config", label: "Config", icon: <Settings2 className="h-4 w-4" /> },
   { id: "intel", label: "Intel", icon: <ShieldCheck className="h-4 w-4" /> },
-  { id: "history", label: "History", icon: <History className="h-4 w-4" /> },
+  { id: "library", label: "Library", icon: <History className="h-4 w-4" /> },
   { id: "schedule", label: "Schedule", icon: <CalendarClock className="h-4 w-4" /> },
 ];
 
@@ -91,7 +94,7 @@ function EmptyBlock({ text }: { text: string }) {
   );
 }
 
-function ListBlock({ items }: { items: PanelItem[] }) {
+function ListBlock({ items, onSelect }: { items: (PanelItem & { id?: any })[]; onSelect?: (id: any) => void }) {
   return (
     <div className="space-y-2">
       {items.map((item, index) => (
@@ -100,10 +103,16 @@ function ListBlock({ items }: { items: PanelItem[] }) {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: index * 0.05, duration: 0.2 }}
-          className="glass-panel rounded-2xl border-white/5 px-4 py-3"
+          onClick={() => item.id != null && onSelect?.(item.id)}
+          className={`glass-panel rounded-2xl border-white/5 px-4 py-3 transition-all ${item.id != null ? 'cursor-pointer hover:border-cyan-500/40 hover:bg-white/5 active:scale-[0.98]' : ''}`}
         >
-          <p className="truncate text-sm font-semibold text-neutral-100">{item.title}</p>
-          <p className="mt-1 truncate text-[11px] uppercase tracking-[0.18em] text-neutral-500">{item.subtitle}</p>
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-neutral-100">{item.title}</p>
+              <p className="mt-1 truncate text-[11px] uppercase tracking-[0.18em] text-neutral-500">{item.subtitle}</p>
+            </div>
+            {item.id != null && <History className="h-3.5 w-3.5 text-neutral-600" />}
+          </div>
         </motion.div>
       ))}
     </div>
@@ -128,18 +137,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
   competitors,
   alerts,
   pastReports,
+  onReportSelect,
   scheduledTasks,
+  isOpen,
+  onClose,
 }) => {
   const intelCards = toPanelItems(
     [...alerts, ...competitors],
     "Intel Feed",
     "Incoming signal",
   );
-  const historyCards = toPanelItems(pastReports, "Report", "Archived");
   const scheduleCards = toPanelItems(scheduledTasks, "Task", "Queued");
 
   return (
-    <aside className="relative z-40 flex h-full w-[23rem] shrink-0 flex-col overflow-hidden border-r border-white/5 premium-gradient">
+    <>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-md lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex h-full w-[20rem] shrink-0 flex-col overflow-hidden border-r border-white/5 premium-gradient transition-transform duration-300 lg:static lg:translate-x-0 ${
+          isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
+        }`}
+      >
       <div className="pointer-events-none absolute inset-0 grid-pattern opacity-[0.08]" />
       <div className="pointer-events-none absolute -left-24 top-0 h-64 w-64 rounded-full bg-cyan-500/10 blur-3xl" />
 
@@ -168,6 +196,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <p className="text-[9px] uppercase tracking-[0.2em] text-emerald-200/70">Tools</p>
             </div>
           </div>
+          <button
+            onClick={onClose}
+            className="absolute right-4 top-4 rounded-xl border border-white/10 bg-white/5 p-2 text-neutral-400 hover:text-white lg:hidden"
+          >
+            <Settings2 className="h-5 w-5" />
+          </button>
         </div>
       </div>
 
@@ -342,10 +376,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </>
             )}
 
-            {sidebarTab === "history" && (
+            {sidebarTab === "library" && (
               <>
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-neutral-500">Report Archive</p>
-                {historyCards.length ? <ListBlock items={historyCards} /> : <EmptyBlock text="No reports archived yet." />}
+                <p className="mb-3 text-[10px] font-black uppercase tracking-[0.24em] text-neutral-500">Research Library</p>
+                {pastReports.length ? (
+                  <ListBlock 
+                    items={pastReports.map(r => ({ ...r, title: r.topic, subtitle: r.created_at, id: r.id }))} 
+                    onSelect={onReportSelect} 
+                  />
+                ) : (
+                  <EmptyBlock text="No reports in library yet. Generated reports are saved automatically." />
+                )}
               </>
             )}
 
@@ -359,5 +400,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </AnimatePresence>
       </div>
     </aside>
+    </>
   );
 };

@@ -28,7 +28,6 @@ from google.adk.agents.invocation_context import InvocationContext
 from google.adk.apps.app import App
 from google.adk.events import Event, EventActions
 from google.adk.planners import BuiltInPlanner
-from google.adk.tools import google_search
 from google.adk.tools.agent_tool import AgentTool
 from google.genai import types as genai_types
 from pydantic import BaseModel, Field
@@ -137,7 +136,79 @@ def collect_research_sources_callback(
                             }
                         )
     callback_context.state["url_to_short_id"] = url_to_short_id
+
 # --- New Tools ---
+def vertex_ai_search(query: str) -> str:
+    """Searches the web using Vertex AI Discovery Engine (Grounded Generation API).
+    
+    Args:
+        query (str): The search query to execute.
+    """
+    try:
+        import os
+        import google.auth
+        from google.cloud import discoveryengine_v1 as discoveryengine
+        
+        credentials, project_id = google.auth.default()
+        actual_project_id = config.gcp_project_id or project_id or os.environ.get("GOOGLE_CLOUD_PROJECT")
+        
+        if not actual_project_id:
+            return "Error: Could not determine Google Cloud Project ID for Vertex AI Search."
+
+        # Support both global and regional engines based on config
+        location = "global"
+        engine_id = "deep-search-engine"
+        
+        client = discoveryengine.SearchServiceClient(credentials=credentials)
+        serving_config = f"projects/{actual_project_id}/locations/{location}/collections/default_collection/engines/{engine_id}/servingConfigs/default_config"
+        
+        request = discoveryengine.SearchRequest(
+            serving_config=serving_config,
+            query=query,
+            page_size=10,
+            content_search_spec=discoveryengine.SearchRequest.ContentSearchSpec(
+                summary_spec=discoveryengine.SearchRequest.ContentSearchSpec.SummarySpec(
+                    summary_result_count=5,
+                    include_citations=True,
+                    ignore_adversarial_query=True,
+                    model_spec=discoveryengine.SearchRequest.ContentSearchSpec.SummarySpec.ModelSpec(
+                        version="stable"
+                    )
+                ),
+                extractive_content_spec=discoveryengine.SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
+                    max_extractive_answer_count=3
+                )
+            )
+        )
+
+        try:
+            response = client.search(request)
+        except Exception as e:
+            if "404" in str(e) or "NOT_FOUND" in str(e):
+                # Fallback to us-central1 if global fails
+                location = "us-central1"
+                serving_config = f"projects/{actual_project_id}/locations/{location}/collections/default_collection/engines/{engine_id}/servingConfigs/default_config"
+                request.serving_config = serving_config
+                response = client.search(request)
+            else:
+                raise e
+        
+        output = [f"Vertex AI Summary:\n{response.summary.summary_text}\n"]
+        
+        output.append("Top Results Data:")
+        for result in response.results:
+            doc = result.document
+            if doc.derived_struct_data:
+                title = doc.derived_struct_data.get("title", "")
+                link = doc.derived_struct_data.get("link", "")
+                snippets = doc.derived_struct_data.get("snippets", [])
+                snippet_text = snippets[0].get("snippet", "") if snippets else ""
+                output.append(f"- {title} ({link}): {snippet_text}")
+        
+        return "\n".join(output)
+    except Exception as e:
+        return f"Vertex AI Search error: {str(e)}"
+
 def web_scrape(url: str) -> str:
     """Scrapes the content of a web page and returns the text.
     
@@ -440,11 +511,11 @@ plan_generator = LlmAgent(
 
     **TOOL USE IS STRICTLY LIMITED:**
     Your goal is to create a generic, high-quality plan *without searching*.
-    Only use `google_search` if a topic is ambiguous or time-sensitive and you absolutely cannot create a plan without a key piece of identifying information.
+    Only use `vertex_ai_search` if a topic is ambiguous or time-sensitive and you absolutely cannot create a plan without a key piece of identifying information.
     You are explicitly forbidden from researching the *content* or *themes* of the topic. That is the next agent's job. Your search is only to identify the subject, not to investigate it.
     Current date: {datetime.datetime.now().strftime("%Y-%m-%d")}
     """,
-    tools=[web_scrape, search_uploaded_docs, recall_past_research],
+    tools=[vertex_ai_search, web_scrape, search_uploaded_docs, recall_past_research],
 )
 
 
@@ -488,7 +559,7 @@ section_researcher = LlmAgent(
     *   **Execution Directive:** You **MUST** systematically process every goal prefixed with `[RESEARCH]` before proceeding to Phase 2.
     *   For each `[RESEARCH]` goal:
         *   **Query Generation:** Formulate a comprehensive set of 4-5 targeted search queries. These queries must be expertly designed to broadly cover the specific intent of the `[RESEARCH]` goal from multiple angles.
-        *   **Execution:** Utilize the `google_search`, `web_scrape`, `search_uploaded_docs`, and `mcp_query` tools to execute **all** generated queries for the current `[RESEARCH]` goal. Use `search_uploaded_docs` if the goal specifically mentions local files or documents. Use `web_scrape` if you need detailed content from a specific URL. Use `mcp_query` for specialized domain knowledge if available.
+        *   **Execution:** Utilize the `vertex_ai_search`, `web_scrape`, `search_uploaded_docs`, and `mcp_query` tools to execute **all** generated queries for the current `[RESEARCH]` goal. Use `search_uploaded_docs` if the goal specifically mentions local files or documents. Use `web_scrape` if you need detailed content from a specific URL. Use `mcp_query` for specialized domain knowledge if available.
         *   **Summarization:** Synthesize the search results into a detailed, coherent summary that directly addresses the objective of the `[RESEARCH]` goal.
         *   **Internal Storage:** Store this summary, clearly tagged or indexed by its corresponding `[RESEARCH]` goal, for later and exclusive use in Phase 2. You **MUST NOT** lose or discard any generated summaries.
 
@@ -512,7 +583,7 @@ section_researcher = LlmAgent(
 
     **Final Output:** Your final output will comprise the complete set of processed summaries from `[RESEARCH]` tasks AND all the generated artifacts from `[DELIVERABLE]` tasks, presented clearly and distinctly.
     """,
-    tools=[google_search],
+    tools=[vertex_ai_search, web_scrape, search_uploaded_docs, mcp_query],
     output_key="section_research_findings",
     after_agent_callback=collect_research_sources_callback,
 )
@@ -556,11 +627,11 @@ enhanced_search_executor = LlmAgent(
     You have been activated because the previous research was graded as 'fail'.
 
     1.  Review the 'research_evaluation' state key to understand the feedback and required fixes.
-    2.  Execute EVERY query listed in 'follow_up_queries' using the most appropriate tool (`google_search`, `web_scrape`, `search_uploaded_docs`, or `mcp_query`).
+    2.  Execute EVERY query listed in 'follow_up_queries' using the most appropriate tool (`vertex_ai_search`, `web_scrape`, `search_uploaded_docs`, or `mcp_query`).
     3.  Synthesize the new findings and COMBINE them with the existing information in 'section_research_findings'.
     4.  Your output MUST be the new, complete, and improved set of research findings.
     """,
-    tools=[google_search],
+    tools=[vertex_ai_search, web_scrape, search_uploaded_docs, mcp_query],
     output_key="section_research_findings",
     after_agent_callback=collect_research_sources_callback,
 )

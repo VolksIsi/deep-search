@@ -6,7 +6,7 @@ $REGION = "us-central1"
 $REPO_NAME = "deep-search-repo"
 $IMAGE_NAME = "allmighty-deep-search"
 $TAG = "latest"
-$IMAGE_URL = "$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$IMAGE_NAME:$TAG"
+$IMAGE_URL = "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${IMAGE_NAME}:${TAG}"
 
 Write-Host "🚀 Starting deployment for Project: $PROJECT_ID in Region: $REGION" -ForegroundColor Cyan
 
