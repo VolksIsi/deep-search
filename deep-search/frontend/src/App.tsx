@@ -121,7 +121,7 @@ export default function App() {
   const [accessToken, setAccessToken] = useState<string>("");
   const [loginError, setLoginError] = useState(false);
 
-  const [selectedModel, setSelectedModel] = useState("gemini-3.1-pro");
+  const [selectedModel, setSelectedModel] = useState("gemini-2.5-flash");
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("config");
   const [competitors, setCompetitors] = useState<any[]>([]);
