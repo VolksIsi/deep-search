@@ -148,76 +148,75 @@ from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_excep
     reraise=True
 )
 def vertex_ai_search(query: str) -> str:
-    """Searches the web using Vertex AI Discovery Engine (Grounded Generation API).
-    
+    """Searches the web using Vertex AI Grounded Generation with Google Search.
+
     Args:
         query (str): The search query to execute.
     """
     try:
         import os
         import google.auth
-        from google.cloud import discoveryengine_v1 as discoveryengine
-        
+        from google.cloud import discoveryengine_v1alpha as discoveryengine
+
         credentials, project_id = google.auth.default()
         actual_project_id = config.gcp_project_id or project_id or os.environ.get("GOOGLE_CLOUD_PROJECT")
-        
+
         if not actual_project_id:
             return "Error: Could not determine Google Cloud Project ID for Vertex AI Search."
 
-        location = "global"
-        engine_id = "deep-search-engine"
-        
-        # ABSOLUTELY FORCE GLOBAL ENDPOINT - This is required for Search Engines created as 'global'
-        # The documentation states: discoveryengine.googleapis.com for global, but 
-        # specifically for some projects 'global-discoveryengine.googleapis.com' helps.
-        client_options = {"api_endpoint": "global-discoveryengine.googleapis.com"}
-        client = discoveryengine.SearchServiceClient(credentials=credentials, client_options=client_options)
-        
-        # Re-derive project ID to be sure
-        actual_project_id = config.gcp_project_id or project_id or os.environ.get("GOOGLE_CLOUD_PROJECT")
-        
-        serving_config = f"projects/{actual_project_id}/locations/{location}/collections/default_collection/engines/{engine_id}/servingConfigs/default_config"
-        
-        request = discoveryengine.SearchRequest(
-            serving_config=serving_config,
-            query=query,
-            page_size=10,
-            content_search_spec=discoveryengine.SearchRequest.ContentSearchSpec(
-                summary_spec=discoveryengine.SearchRequest.ContentSearchSpec.SummarySpec(
-                    summary_result_count=5,
-                    include_citations=True,
-                    ignore_adversarial_query=True,
-                    model_spec=discoveryengine.SearchRequest.ContentSearchSpec.SummarySpec.ModelSpec(
-                        version="stable"
-                    )
-                ),
-                extractive_content_spec=discoveryengine.SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
-                    max_extractive_answer_count=3
-                )
-            )
+        client_options = {"api_endpoint": "discoveryengine.googleapis.com"}
+        client = discoveryengine.GroundedGenerationServiceClient(
+            credentials=credentials,
+            client_options=client_options
         )
 
-        # No fallback to us-central1 here, we must use GLOBAL for this engine
-        response = client.search(request)
-        
-        output = [f"Vertex AI Summary:\n{response.summary.summary_text}\n"]
-        
-        output.append("Top Results Data:")
-        for result in response.results:
-            doc = result.document
-            if doc.derived_struct_data:
-                title = doc.derived_struct_data.get("title", "")
-                link = doc.derived_struct_data.get("link", "")
-                suffixes = doc.derived_struct_data.get("snippets", [])
-                snippet_text = suffixes[0].get("snippet", "") if suffixes else ""
-                output.append(f"- {title} ({link}): {snippet_text}")
-        
+        request = discoveryengine.GenerateGroundedContentRequest(
+            location=f"projects/{actual_project_id}/locations/global",
+            contents=[
+                discoveryengine.GroundedGenerationContent(
+                    role="user",
+                    parts=[discoveryengine.GroundedGenerationContent.Part(text=query)]
+                )
+            ],
+            system_instruction=discoveryengine.GroundedGenerationContent(
+                parts=[discoveryengine.GroundedGenerationContent.Part(
+                    text="You are a research assistant. Search the web and provide a comprehensive, factual answer with sources."
+                )]
+            ),
+            generation_spec=discoveryengine.GenerateGroundedContentRequest.GenerationSpec(
+                model_id="gemini-2.5-flash",
+            ),
+            grounding_spec=discoveryengine.GenerateGroundedContentRequest.GroundingSpec(
+                grounding_sources=[
+                    discoveryengine.GenerateGroundedContentRequest.GroundingSpec.GroundingSource(
+                        google_search_source=discoveryengine.GenerateGroundedContentRequest.GroundingSpec.GroundingSource.GoogleSearchSource()
+                    )
+                ]
+            ),
+        )
+
+        response = client.generate_grounded_content(request)
+
+        candidate = response.candidates[0] if response.candidates else None
+        if not candidate:
+            return "No results found."
+
+        answer_text = "".join(part.text for part in candidate.content.parts if hasattr(part, "text"))
+
+        output = [f"Web Search Results:\n{answer_text}\n"]
+
+        if hasattr(candidate, "grounding_metadata") and candidate.grounding_metadata:
+            output.append("Sources:")
+            for chunk in candidate.grounding_metadata.grounding_chunks:
+                if hasattr(chunk, "web") and chunk.web:
+                    output.append(f"- {chunk.web.title}: {chunk.web.uri}")
+
         return "\n".join(output)
     except Exception as e:
         err_str = str(e).lower()
         if "429" in err_str or "exhausted" in err_str:
-             print(f"Rate limit hit for query '{query}'. Retrying...")
-             raise e
+            print(f"Rate limit hit for query '{query}'. Retrying...")
+            raise e
         return f"Vertex AI Search error: {str(e)}"
 
 def web_scrape(url: str) -> str:
