@@ -129,6 +129,7 @@ export default function App() {
   const [pastReports, setPastReports] = useState<any[]>([]);
   const [scheduledTasks, setScheduledTasks] = useState<any[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // @ts-ignore: used in JSX
   const [hasResearchPlan, setHasResearchPlan] = useState(false);
 
   const currentAgentRef = useRef("");
