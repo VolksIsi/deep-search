@@ -431,16 +431,24 @@ export default function App() {
   );
 
   const handleExportPDF = async () => {
-    const report = messages.find((message) => message.finalReportWithCitations);
-    if (!report) return;
+    let report = messages.find((m) => m.finalReportWithCitations);
+    const content = report ? report.content : messages.filter(m => m.type === "ai").pop()?.content;
+    
+    if (!content) return;
 
     try {
       const response = await fetch("/api/export/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: report.content, title: "Research Report" }),
+        body: JSON.stringify({ content: content, title: "Deep_Search_Report" }),
       });
-      if (!response.ok) return;
+      
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        console.error("PDF export server error:", response.status, errData);
+        alert(`Export fehlgeschlagen: Server antwortete mit ${response.status}`);
+        return;
+      }
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -448,9 +456,10 @@ export default function App() {
       anchor.href = url;
       anchor.download = "research_report.pdf";
       anchor.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 100);
     } catch (error) {
       console.error("PDF export failed", error);
+      alert("PDF Export fehlgeschlagen. Siehe Konsole.");
     }
   };
 
@@ -466,7 +475,11 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: content, title: "Deep_Search_Report" }),
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        console.error("DOCX export server error:", response.status);
+        alert("DOCX Export fehlgeschlagen.");
+        return;
+      }
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -474,9 +487,10 @@ export default function App() {
       anchor.href = url;
       anchor.download = "research_report.docx";
       anchor.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 100);
     } catch (error) {
       console.error("DOCX export failed", error);
+      alert("DOCX Export fehlgeschlagen.");
     }
   };
 
@@ -492,7 +506,11 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: content, title: "Deep_Search_Report" }),
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        console.error("HTML export server error:", response.status);
+        alert("HTML Export fehlgeschlagen.");
+        return;
+      }
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -500,9 +518,10 @@ export default function App() {
       anchor.href = url;
       anchor.download = "research_report.html";
       anchor.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 100);
     } catch (error) {
       console.error("HTML export failed", error);
+      alert("HTML Export fehlgeschlagen.");
     }
   };
 
@@ -518,7 +537,11 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: content, title: "Deep_Search_Report" }),
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        console.error("TXT export server error:", response.status);
+        alert("TXT Export fehlgeschlagen.");
+        return;
+      }
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -526,9 +549,10 @@ export default function App() {
       anchor.href = url;
       anchor.download = "research_report.txt";
       anchor.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 100);
     } catch (error) {
       console.error("TXT export failed", error);
+      alert("TXT Export fehlgeschlagen.");
     }
   };
 
@@ -1061,10 +1085,11 @@ function ResearchView({
                   <div className="h-4 w-[1px] bg-white/5" />
                   <button 
                     onClick={() => {
-                      const report = messages.find(m => m.finalReportWithCitations);
-                      if (report) {
-                        navigator.clipboard.writeText(report.content);
-                        alert("Bericht in die Zwischenablage kopiert!");
+                      let report = messages.find((m) => m.finalReportWithCitations);
+                      const content = report ? report.content : messages.filter(m => m.type === "ai").pop()?.content;
+                      if (content) {
+                        navigator.clipboard.writeText(content);
+                        alert("Inhalt in die Zwischenablage kopiert!");
                       }
                     }} 
                     className="flex items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-emerald-300 transition hover:bg-emerald-500/10"
