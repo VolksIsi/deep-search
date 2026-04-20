@@ -439,14 +439,17 @@ export default function App() {
     try {
       const response = await fetch("/api/export/pdf", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-Access-Token": "DeepSearch2026!"
+        },
         body: JSON.stringify({ content: content, title: "Deep_Search_Report" }),
       });
       
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
         console.error("PDF export server error:", response.status, errData);
-        alert(`Export fehlgeschlagen: Server antwortete mit ${response.status}`);
+        alert(`Export fehlgeschlagen: Server antwortete mit ${response.status} (Unauthorized/Access Denied)`);
         return;
       }
 
@@ -472,12 +475,15 @@ export default function App() {
     try {
       const response = await fetch("/api/export/docx", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-Access-Token": "DeepSearch2026!"
+        },
         body: JSON.stringify({ content: content, title: "Deep_Search_Report" }),
       });
       if (!response.ok) {
         console.error("DOCX export server error:", response.status);
-        alert("DOCX Export fehlgeschlagen.");
+        alert(`DOCX Export fehlgeschlagen: ${response.status}`);
         return;
       }
 
@@ -503,12 +509,15 @@ export default function App() {
     try {
       const response = await fetch("/api/export/html", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-Access-Token": "DeepSearch2026!"
+        },
         body: JSON.stringify({ content: content, title: "Deep_Search_Report" }),
       });
       if (!response.ok) {
         console.error("HTML export server error:", response.status);
-        alert("HTML Export fehlgeschlagen.");
+        alert(`HTML Export fehlgeschlagen: ${response.status}`);
         return;
       }
 
@@ -534,12 +543,15 @@ export default function App() {
     try {
       const response = await fetch("/api/export/txt", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-Access-Token": "DeepSearch2026!"
+        },
         body: JSON.stringify({ content: content, title: "Deep_Search_Report" }),
       });
       if (!response.ok) {
         console.error("TXT export server error:", response.status);
-        alert("TXT Export fehlgeschlagen.");
+        alert(`TXT Export fehlgeschlagen: ${response.status}`);
         return;
       }
 
