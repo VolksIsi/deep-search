@@ -104,10 +104,10 @@ export const ChatMessagesView: React.FC<ChatMessagesViewProps> = ({
                     <TaskBoard 
                       tasks={msg.content
                         .split("\n")
-                        .filter(line => line.includes("[RESEARCH]"))
+                        .filter(line => line.includes("[RESEARCH]") || line.includes("[RECHERCHE]"))
                         .map((line, i) => ({
                           id: `task_${i}`,
-                          title: line.replace(/\[RESEARCH\]\s*/g, ""),
+                          title: line.replace(/\[(RESEARCH|RECHERCHE)\]\s*/g, ""),
                           status: i === 0 && isLoading ? "running" : "pending"
                         }))
                       } 

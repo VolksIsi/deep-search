@@ -186,6 +186,19 @@ def export_to_pdf(markdown_text: str, title: str = "Research Report") -> bytes:
         return html.encode('utf-8')
 
 
+def export_to_html(markdown_text: str, title: str = "Research Report") -> bytes:
+    """Export markdown report to styled HTML bytes."""
+    html = markdown_to_html(markdown_text)
+    return html.encode('utf-8')
+
+
+def export_to_txt(markdown_text: str, title: str = "Research Report") -> bytes:
+    """Export markdown report to plain text bytes."""
+    # Remove simple markdown tags if needed, but usually TXT researchers want the clean MD or strip MD.
+    # We'll provide clean MD as it's the standard for text-based reports.
+    return markdown_text.encode('utf-8')
+
+
 def export_to_docx(markdown_text: str, title: str = "Research Report") -> bytes:
     """Export markdown report to DOCX bytes."""
     try:

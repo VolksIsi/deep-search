@@ -43,7 +43,7 @@ interface ProcessedEvent {
 }
 
 function isResearchPlanMessage(content: string) {
-  return /\[RESEARCH\]/i.test(content);
+  return /\[RESEARCH\]/i.test(content) || /\[RECHERCHE\]/i.test(content) || /\[FORSCHUNG\]/i.test(content) || /FORSCHUNGSPLAN/i.test(content);
 }
 
 function useVoiceInput() {
@@ -304,9 +304,12 @@ export default function App() {
           // Intelligent Keyword Detection for Research Plan Approval Buttons
           const lowerText = accumulatedTextRef.current.toLowerCase();
           if (
-            (lowerText.includes("approve this plan") || 
-             lowerText.includes("refine it further") || 
-             lowerText.includes("do you approve"))
+            (lowerText.includes("approve") || 
+             lowerText.includes("refine") || 
+             lowerText.includes("genehmigen") ||
+             lowerText.includes("einverstanden") || 
+             lowerText.includes("anpassungen") ||
+             lowerText.includes("entspricht")) && (lowerText.includes("plan") || lowerText.includes("strategie"))
           ) {
             setHasResearchPlan(true);
           }
@@ -452,14 +455,16 @@ export default function App() {
   };
 
   const handleExportDocx = async () => {
-    const report = messages.find((message) => message.finalReportWithCitations);
-    if (!report) return;
+    let report = messages.find((m) => m.finalReportWithCitations);
+    const content = report ? report.content : messages.filter(m => m.type === "ai").pop()?.content;
+    
+    if (!content) return;
 
     try {
       const response = await fetch("/api/export/docx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: report.content, title: "Research Report" }),
+        body: JSON.stringify({ content: content, title: "Deep_Search_Report" }),
       });
       if (!response.ok) return;
 
@@ -472,6 +477,58 @@ export default function App() {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error("DOCX export failed", error);
+    }
+  };
+
+  const handleExportHTML = async () => {
+    let report = messages.find((m) => m.finalReportWithCitations);
+    const content = report ? report.content : messages.filter(m => m.type === "ai").pop()?.content;
+    
+    if (!content) return;
+
+    try {
+      const response = await fetch("/api/export/html", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: content, title: "Deep_Search_Report" }),
+      });
+      if (!response.ok) return;
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "research_report.html";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("HTML export failed", error);
+    }
+  };
+
+  const handleExportTXT = async () => {
+    let report = messages.find((m) => m.finalReportWithCitations);
+    const content = report ? report.content : messages.filter(m => m.type === "ai").pop()?.content;
+    
+    if (!content) return;
+
+    try {
+      const response = await fetch("/api/export/txt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: content, title: "Deep_Search_Report" }),
+      });
+      if (!response.ok) return;
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "research_report.txt";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("TXT export failed", error);
     }
   };
 
@@ -507,7 +564,7 @@ export default function App() {
     }
   }, [handleSubmit, isListening, setTranscript, transcript]);
 
-  const hasReport = useMemo(() => messages.some((message) => message.finalReportWithCitations), [messages]);
+  const hasReport = useMemo(() => messages.some((message) => message.type === "ai" && message.content && message.content.length > 50), [messages]);
   const aiMessageCount = useMemo(() => messages.filter((message) => message.type === "ai").length, [messages]);
   const toolRuns = useMemo(
     () => Array.from(messageEvents.values()).reduce((sum, events) => sum + events.length, 0),
@@ -698,6 +755,8 @@ export default function App() {
                 hasReport={hasReport}
                 onExportPDF={handleExportPDF}
                 onExportDocx={handleExportDocx}
+                onExportHTML={handleExportHTML}
+                onExportTXT={handleExportTXT}
                 isSpeaking={isSpeaking}
                 onSpeak={() => {
                   const r = messages.find((m) => m.finalReportWithCitations);
@@ -887,6 +946,8 @@ function ResearchView({
   hasReport,
   onExportPDF,
   onExportDocx,
+  onExportHTML,
+  onExportTXT,
   isSpeaking,
   onSpeak,
   onStopSpeak,
@@ -904,6 +965,8 @@ function ResearchView({
   hasReport: boolean;
   onExportPDF: () => void;
   onExportDocx: () => void;
+  onExportHTML: () => void;
+  onExportTXT: () => void;
   isSpeaking: boolean;
   onSpeak: () => void;
   onStopSpeak: () => void;
@@ -981,11 +1044,27 @@ function ResearchView({
                   </button>
                   <div className="h-4 w-[1px] bg-white/5" />
                   <button 
+                    onClick={onExportHTML} 
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-amber-300 transition hover:bg-amber-500/10"
+                  >
+                    <Globe className="h-3.5 w-3.5" />
+                    HTML
+                  </button>
+                  <div className="h-4 w-[1px] bg-white/5" />
+                  <button 
+                    onClick={onExportTXT} 
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-neutral-300 transition hover:bg-neutral-500/10"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    TXT
+                  </button>
+                  <div className="h-4 w-[1px] bg-white/5" />
+                  <button 
                     onClick={() => {
                       const report = messages.find(m => m.finalReportWithCitations);
                       if (report) {
                         navigator.clipboard.writeText(report.content);
-                        alert("Report copied to clipboard!");
+                        alert("Bericht in die Zwischenablage kopiert!");
                       }
                     }} 
                     className="flex items-center gap-2 rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-emerald-300 transition hover:bg-emerald-500/10"
@@ -1015,7 +1094,7 @@ function ResearchView({
         </div>
       </header>
 
-      <div ref={scrollAreaRef} className="relative flex-1 space-y-12 overflow-y-auto px-8 py-10 scrollbar-hide">
+      <div ref={scrollAreaRef} className="relative flex-1 space-y-12 overflow-y-auto px-8 py-10">
         <AnimatePresence initial={false}>
           {messages.map((message) => (
             <motion.div

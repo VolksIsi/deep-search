@@ -30,6 +30,7 @@ from google.adk.events import Event, EventActions
 from google.adk.planners import BuiltInPlanner
 from google.adk.tools.agent_tool import AgentTool
 from google.genai import types as genai_types
+from google.adk.tools import google_search
 from pydantic import BaseModel, Field
 import requests
 from bs4 import BeautifulSoup
@@ -138,81 +139,10 @@ def collect_research_sources_callback(
     callback_context.state["url_to_short_id"] = url_to_short_id
 
 import time
-from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 
-# --- New Tools ---
-@retry(
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-    stop=stop_after_attempt(3),
-    retry=retry_if_exception_type(Exception), # Catch generic and resource exhausted
-    reraise=True
-)
-def vertex_ai_search(query: str) -> str:
-    """Searches the web using Vertex AI Discovery Engine (Search API).
-
-    Args:
-        query (str): The search query to execute.
-    """
-    try:
-        import os
-        import google.auth
-        from google.cloud import discoveryengine_v1 as discoveryengine
-
-        credentials, project_id = google.auth.default()
-        actual_project_id = config.gcp_project_id or project_id or os.environ.get("GOOGLE_CLOUD_PROJECT")
-
-        if not actual_project_id:
-            return "Error: Could not determine Google Cloud Project ID for Vertex AI Search."
-
-        location = "global"
-        engine_id = "deep-search-engine"
-
-        # Force global endpoint for Discovery Engine
-        client_options = {"api_endpoint": "global-discoveryengine.googleapis.com"}
-        client = discoveryengine.SearchServiceClient(credentials=credentials, client_options=client_options)
-
-        serving_config = f"projects/{actual_project_id}/locations/{location}/collections/default_collection/engines/{engine_id}/servingConfigs/default_config"
-
-        request = discoveryengine.SearchRequest(
-            serving_config=serving_config,
-            query=query,
-            page_size=10,
-            content_search_spec=discoveryengine.SearchRequest.ContentSearchSpec(
-                summary_spec=discoveryengine.SearchRequest.ContentSearchSpec.SummarySpec(
-                    summary_result_count=5,
-                    include_citations=True,
-                    ignore_adversarial_query=True,
-                    model_spec=discoveryengine.SearchRequest.ContentSearchSpec.SummarySpec.ModelSpec(
-                        version="stable"
-                    )
-                ),
-                extractive_content_spec=discoveryengine.SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
-                    max_extractive_answer_count=3
-                )
-            )
-        )
-
-        response = client.search(request)
-
-        output = [f"Vertex AI Summary:\n{response.summary.summary_text}\n"]
-
-        output.append("Top Results Data:")
-        for result in response.results:
-            doc = result.document
-            if doc.derived_struct_data:
-                title = doc.derived_struct_data.get("title", "")
-                link = doc.derived_struct_data.get("link", "")
-                snippets = doc.derived_struct_data.get("snippets", [])
-                snippet_text = snippets[0].get("snippet", "") if snippets else ""
-                output.append(f"- {title} ({link}): {snippet_text}")
-
-        return "\n".join(output)
-    except Exception as e:
-        err_str = str(e).lower()
-        if "429" in err_str or "exhausted" in err_str:
-            print(f"Rate limit hit for query '{query}'. Retrying...")
-            raise e
-        return f"Vertex AI Search error: {str(e)}"
+# --- google_search is imported from google.adk.tools (Gemini-native grounding) ---
+# No custom vertex_ai_search needed - ADK's google_search uses Gemini's
+# built-in Google Search grounding which works without Discovery Engine setup.
 
 def web_scrape(url: str) -> str:
     """Scrapes the content of a web page and returns the text.
@@ -484,6 +414,21 @@ class EscalationChecker(BaseAgent):
             yield Event(author=self.name)
 
 
+# --- SPECIALIZED SEARCH AGENT ---
+# We create a dedicated agent for search because Gemini Grounding (google_search)
+# cannot be mixed with other function tools (like web_scrape) in a single tool list.
+# By wrapping it in an agent, we can call it as a separate tool.
+google_search_executor = LlmAgent(
+    model=config.worker_model,
+    name="google_search_executor",
+    description="Executes a web search using Google Search grounding. Use this for up-to-date information.",
+    instruction="""
+    You are a search specialist. Use the provided google_search tool to find the most accurate and up-to-date information for the user's query.
+    Always provide a concise but comprehensive summary of your findings with citations where available.
+    """,
+    tools=[google_search],
+)
+
 # --- AGENT DEFINITIONS ---
 plan_generator = LlmAgent(
     model=config.worker_model,
@@ -514,13 +459,17 @@ plan_generator = LlmAgent(
     - **Maintain Order:** Strictly maintain the original sequential order of existing bullet points. New bullets, whether `[NEW]` or `[IMPLIED]`, should generally be appended to the list, unless the user explicitly instructs a specific insertion point.
     - **Flexible Length:** The refined plan is no longer constrained by the initial 5-bullet limit and may comprise more goals as needed to fully address the feedback and implied deliverables.
 
+    **STRICT TAG RULE:**
+    - **NEVER** translate the tags `[RESEARCH]` and `[DELIVERABLE]` into any other language. 
+    - **ALWAYS** use the exact English strings `[RESEARCH]` and `[DELIVERABLE]` even if the plan content itself is in another language. These tags are technical triggers for the system.
+
     **TOOL USE IS STRICTLY LIMITED:**
     Your goal is to create a generic, high-quality plan *without searching*.
-    Only use `vertex_ai_search` if a topic is ambiguous or time-sensitive and you absolutely cannot create a plan without a key piece of identifying information.
+    Only use `google_search` if a topic is ambiguous or time-sensitive and you absolutely cannot create a plan without a key piece of identifying information.
     You are explicitly forbidden from researching the *content* or *themes* of the topic. That is the next agent's job. Your search is only to identify the subject, not to investigate it.
     Current date: {datetime.datetime.now().strftime("%Y-%m-%d")}
     """,
-    tools=[vertex_ai_search, web_scrape, search_uploaded_docs, recall_past_research],
+    tools=[AgentTool(google_search_executor), web_scrape, search_uploaded_docs, recall_past_research],
 )
 
 
@@ -559,36 +508,36 @@ section_researcher = LlmAgent(
 
     ---
 
-    **Phase 1: Information Gathering (`[RESEARCH]` Tasks)**
+    **Phase 1: Information Gathering (`[RESEARCH]`, `[FORSCHUNG]`, or `[RECHERCHE]` Tasks)**
 
-    *   **Execution Directive:** You **MUST** systematically process every goal prefixed with `[RESEARCH]` before proceeding to Phase 2.
-    *   For each `[RESEARCH]` goal:
-        *   **Query Generation:** Formulate a comprehensive set of 4-5 targeted search queries. These queries must be expertly designed to broadly cover the specific intent of the `[RESEARCH]` goal from multiple angles.
-        *   **Execution:** Utilize the `vertex_ai_search`, `web_scrape`, `search_uploaded_docs`, and `mcp_query` tools to execute **all** generated queries for the current `[RESEARCH]` goal. Use `search_uploaded_docs` if the goal specifically mentions local files or documents. Use `web_scrape` if you need detailed content from a specific URL. Use `mcp_query` for specialized domain knowledge if available.
-        *   **Summarization:** Synthesize the search results into a detailed, coherent summary that directly addresses the objective of the `[RESEARCH]` goal.
-        *   **Internal Storage:** Store this summary, clearly tagged or indexed by its corresponding `[RESEARCH]` goal, for later and exclusive use in Phase 2. You **MUST NOT** lose or discard any generated summaries.
+    *   **Execution Directive:** You **MUST** systematically process every goal prefixed with `[RESEARCH]`, `[FORSCHUNG]`, or `[RECHERCHE]` before proceeding to Phase 2.
+    *   For each such goal:
+        *   **Query Generation:** Formulate a comprehensive set of 4-5 targeted search queries. These queries must be expertly designed to broadly cover the specific intent of the goal from multiple angles.
+        *   **Execution:** Utilize the `google_search_executor`, `web_scrape`, `search_uploaded_docs`, and `mcp_query` tools to execute **all** generated queries for the current goal.
+        *   **Summarization:** Synthesize the search results into a detailed, coherent summary that directly addresses the objective of the goal.
+        *   **Internal Storage:** Store this summary, clearly tagged or indexed by its corresponding goal, for later and exclusive use in Phase 2. You **MUST NOT** lose or discard any generated summaries.
 
     ---
 
-    **Phase 2: Synthesis and Output Creation (`[DELIVERABLE]` Tasks)**
+    **Phase 2: Synthesis and Output Creation (`[DELIVERABLE]`, `[ERGEBNIS]`, or `[LIEFERUNG]` Tasks)**
 
-    *   **Execution Prerequisite:** This phase **MUST ONLY COMMENCE** once **ALL** `[RESEARCH]` goals from Phase 1 have been fully completed and their summaries are internally stored.
-    *   **Execution Directive:** You **MUST** systematically process **every** goal prefixed with `[DELIVERABLE]`. For each `[DELIVERABLE]` goal, your directive is to **PRODUCE** the artifact as explicitly described.
-    *   For each `[DELIVERABLE]` goal:
-        *   **Instruction Interpretation:** You will interpret the goal's text (following the `[DELIVERABLE]` tag) as a **direct and non-negotiable instruction** to generate a specific output artifact.
+    *   **Execution Prerequisite:** This phase **MUST ONLY COMMENCE** once **ALL** information gathering goals from Phase 1 have been fully completed and their summaries are internally stored.
+    *   **Execution Directive:** You **MUST** systematically process **every** goal prefixed with `[DELIVERABLE]`, `[ERGEBNIS]`, or `[LIEFERUNG]`. For each such goal, your directive is to **PRODUCE** the artifact as explicitly described.
+    *   For each such goal:
+        *   **Instruction Interpretation:** You will interpret the goal's text (following the tag) as a **direct and non-negotiable instruction** to generate a specific output artifact.
             *   *If the instruction details a table (e.g., "Create a Detailed Comparison Table in Markdown format"), your output for this step **MUST** be a properly formatted Markdown table utilizing columns and rows as implied by the instruction and the prepared data.*
             *   *If the instruction states to prepare a summary, report, or any other structured output, your output for this step **MUST** be that precise artifact.*
-        *   **Data Consolidation:** Access and utilize **ONLY** the summaries generated during Phase 1 (`[RESEARCH]` tasks`) to fulfill the requirements of the current `[DELIVERABLE]` goal. You **MUST NOT** perform new searches.
-        *   **Output Generation:** Based on the specific instruction of the `[DELIVERABLE]` goal:
+        *   **Data Consolidation:** Access and utilize **ONLY** the summaries generated during Phase 1 tasks to fulfill the requirements of the current goal. You **MUST NOT** perform new searches.
+        *   **Output Generation:** Based on the specific instruction of the goal:
             *   Carefully extract, organize, and synthesize the relevant information from your previously gathered summaries.
             *   Must always produce the specified output artifact (e.g., a concise summary, a structured comparison table, a comprehensive report, a visual representation, etc.) with accuracy and completeness.
-        *   **Output Accumulation:** Maintain and accumulate **all** the generated `[DELIVERABLE]` artifacts. These are your final outputs.
+        *   **Output Accumulation:** Maintain and accumulate **all** the generated artifacts. These are your final outputs.
 
     ---
 
     **Final Output:** Your final output will comprise the complete set of processed summaries from `[RESEARCH]` tasks AND all the generated artifacts from `[DELIVERABLE]` tasks, presented clearly and distinctly.
     """,
-    tools=[vertex_ai_search, web_scrape, search_uploaded_docs, mcp_query],
+    tools=[AgentTool(google_search_executor), web_scrape, search_uploaded_docs, mcp_query],
     output_key="section_research_findings",
     after_agent_callback=collect_research_sources_callback,
 )
@@ -632,11 +581,11 @@ enhanced_search_executor = LlmAgent(
     You have been activated because the previous research was graded as 'fail'.
 
     1.  Review the 'research_evaluation' state key to understand the feedback and required fixes.
-    2.  Execute EVERY query listed in 'follow_up_queries' using the most appropriate tool (`vertex_ai_search`, `web_scrape`, `search_uploaded_docs`, or `mcp_query`).
+    2.  Execute EVERY query listed in 'follow_up_queries' using the most appropriate tool (`google_search_executor`, `web_scrape`, `search_uploaded_docs`, or `mcp_query`).
     3.  Synthesize the new findings and COMBINE them with the existing information in 'section_research_findings'.
     4.  Your output MUST be the new, complete, and improved set of research findings.
     """,
-    tools=[vertex_ai_search, web_scrape, search_uploaded_docs, mcp_query],
+    tools=[AgentTool(google_search_executor), web_scrape, search_uploaded_docs, mcp_query],
     output_key="section_research_findings",
     after_agent_callback=collect_research_sources_callback,
 )

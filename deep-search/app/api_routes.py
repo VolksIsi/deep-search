@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import io
 
-from .export import export_to_pdf, export_to_docx
+from .export import export_to_pdf, export_to_docx, export_to_html, export_to_txt
 from .memory import (
     get_reports, get_report_by_id, get_recent_sessions,
     recall_memories, get_scheduled_tasks, add_scheduled_task,
@@ -76,6 +76,34 @@ async def export_docx(req: ExportRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"DOCX export failed: {str(e)}")
+
+
+@router.post("/export/html")
+async def export_html(req: ExportRequest):
+    """Export a report as HTML."""
+    try:
+        html_bytes = export_to_html(req.content, req.title)
+        return StreamingResponse(
+            io.BytesIO(html_bytes),
+            media_type="text/html",
+            headers={"Content-Disposition": f'attachment; filename="{req.title}.html"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"HTML export failed: {str(e)}")
+
+
+@router.post("/export/txt")
+async def export_txt(req: ExportRequest):
+    """Export a report as TXT."""
+    try:
+        txt_bytes = export_to_txt(req.content, req.title)
+        return StreamingResponse(
+            io.BytesIO(txt_bytes),
+            media_type="text/plain",
+            headers={"Content-Disposition": f'attachment; filename="{req.title}.txt"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TXT export failed: {str(e)}")
 
 
 # --- File Upload ---
